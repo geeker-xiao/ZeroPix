@@ -19,7 +19,7 @@ func TestColorWindowShowsEveryFormat(t *testing.T) {
 		"#E53935", "rgb(229, 57, 53)", "15022389",
 		"RGB", "Dec", "Hex",
 		"Red", "Green", "Blue", "229", "57", "53",
-		"重新拾取", "关闭",
+		"重新拾取",
 		"复制RGB", "复制Dec", "复制Hex",
 	} {
 		if !tt.HasText(want) {
@@ -214,7 +214,7 @@ func TestColorWindowFitsTheWindow(t *testing.T) {
 	for _, name := range []string{
 		"Original", "New", "Red:", "Green:", "Blue:",
 		"RGB:", "Dec:", "Hex:", "复制RGB", "复制Dec", "复制Hex",
-		"重新拾取", "关闭",
+		"重新拾取",
 	} {
 		r, ok := tt.Find(name)
 		if !ok {

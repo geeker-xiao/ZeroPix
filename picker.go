@@ -412,9 +412,11 @@ func (w *colorWindow) view(c *ui.Context) {
 				note = " "
 			}
 			ui.Text(c, note).FontSize(11.5).TextColor(t.TextMuted)
+			// One button only: the window closes from the cross in its
+			// header, or with Esc, so a second one at the foot of the page
+			// would only repeat it.
 			ui.Row(c).Gap(10).Justify(ui.Center).Children(func() {
 				ui.Button(c, "重新拾取").Width(150).OnClick(func() { startPick() })
-				brandPrimaryButton(c, "关闭", 150, false, w.close)
 			})
 		})
 	})
