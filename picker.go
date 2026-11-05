@@ -372,7 +372,9 @@ func showColorWindow(col color.RGBA) {
 	w.setColor(col, true)
 	// Frameless like the settings dialog, with the same header of its own:
 	// the title bar of Windows would cut the window off the sheet.
-	w.win = dialogWindow(colorWinTitle, colorWinW, colorWinH, 540, 450, "", w.view)
+	// The page is laid out to this exact height: allowing a shorter window
+	// would only clip the buttons off its bottom.
+	w.win = dialogWindow(colorWinTitle, colorWinW, colorWinH, 540, colorWinH, "", w.view)
 	app.colorWin = w
 }
 
