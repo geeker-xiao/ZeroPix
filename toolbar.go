@@ -25,15 +25,79 @@ const (
 	tbInset     float32 = 10
 )
 
-var (
-	// The bar is ink, like the title bars, so it reads over any capture.
-	tbFore    = ui.RGB(0xE8, 0xEE, 0xF3)
-	tbMuted   = ui.RGB(0x5C, 0x6B, 0x79)
-	tbHover   = ui.RGBA(255, 255, 255, 0.10)
-	tbActive  = ui.RGBA(0, 0xC9, 0xA0, 0.18)
-	tbAccent  = ui.RGB(0x00, 0xC9, 0xA0)
-	tbDivider = ui.RGBA(255, 255, 255, 0.14)
-)
+// The bar is a sheet of its own over the capture, so it carries the
+// appearance: ink in the dark theme, near-white in the light one, where a
+// black slab would be the only dark thing on the screen. Every colour below
+// follows the theme for the same reason.
+
+func tbBarColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(0x14, 0x1B, 0x23, 0.97)
+	}
+	return ui.RGBA(0xFF, 0xFF, 0xFF, 0.98)
+}
+
+func tbBarBorderColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(255, 255, 255, 0.12)
+	}
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.12)
+}
+
+func tbBarShadowColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(0, 0, 0, 0.30)
+	}
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.16)
+}
+
+// tbFore is an icon or a label at rest.
+func tbFore(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0xE8, 0xEE, 0xF3)
+	}
+	return inkColor()
+}
+
+// tbMuted is a button that cannot be pressed, such as undo with nothing to
+// undo.
+func tbMuted(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0x5C, 0x6B, 0x79)
+	}
+	return ui.RGB(0x9F, 0xAB, 0xB6)
+}
+
+func tbHover(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(255, 255, 255, 0.10)
+	}
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.06)
+}
+
+// tbActive is the face of the tool in use.
+func tbActive(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(0, 0xC9, 0xA0, 0.18)
+	}
+	return ui.RGB(0xE4, 0xF8, 0xF2)
+}
+
+// tbAccent draws the tool in use: the pure teal on ink, the darker one on
+// the white sheet.
+func tbAccent(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return accentColor()
+	}
+	return accentInkColor()
+}
+
+func tbDivider(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(255, 255, 255, 0.14)
+	}
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.10)
+}
 
 // barItem is one button of the bar: a drawing tool, or an action.
 type barItem struct {
@@ -273,11 +337,12 @@ func (s *snipSession) buildToolbar(c *ui.Context) {
 
 	x, y := s.toolbarPos(barW, barH)
 	s.barRect = ui.Rect{X: x, Y: y, W: barW, H: barH}
+	t := c.Theme()
 	ui.Column(c).Absolute().Left(x).Top(y).Width(barW).Height(barH).
 		Radius(10).Padding(tbPadY, tbPadX).Gap(tbRowGap).
-		Background(ui.RGBA(0x14, 0x1B, 0x23, 0.97)).
-		Border(1, ui.RGBA(255, 255, 255, 0.12)).
-		Shadow(0, 6, 22, 0, ui.RGBA(0, 0, 0, 0.30)).
+		Background(tbBarColor(t)).
+		Border(1, tbBarBorderColor(t)).
+		Shadow(0, 6, 22, 0, tbBarShadowColor(t)).
 		Children(func() {
 			for _, row := range rows {
 				s.buildRow(c, row)
@@ -338,7 +403,7 @@ func (s *snipSession) inFloating(x, y float32) bool {
 }
 
 func (s *snipSession) toolbarDivider(c *ui.Context) {
-	ui.Box(c).Width(tbDivW).Height(22).MarginX(tbDivMargin).Background(tbDivider)
+	ui.Box(c).Width(tbDivW).Height(22).MarginX(tbDivMargin).Background(tbDivider(c.Theme()))
 }
 
 // colorButton is one swatch: a dot in its colour, ringed while it is the one
@@ -348,7 +413,7 @@ func (s *snipSession) colorButton(c *ui.Context, key string, col ui.Color, name 
 	b := ui.ButtonBase(c.Key(key)).Width(tbSwatchW).Height(30).Radius(6).
 		Center().Label(name).Tooltip(name + "（描边与文字）")
 	if b.Hovered() {
-		b.Background(tbHover)
+		b.Background(tbHover(c.Theme()))
 	}
 	if b.Clicked() {
 		s.color = col
@@ -378,21 +443,22 @@ func (s *snipSession) barButton(c *ui.Context, it *barItem) {
 	if it.id == "redo" {
 		disabled = len(s.redone) == 0
 	}
-	fg := tbFore
+	t := c.Theme()
+	fg := tbFore(t)
 	if active {
-		fg = tbAccent
+		fg = tbAccent(t)
 	}
 	if disabled {
-		fg = tbMuted
+		fg = tbMuted(t)
 	}
 	key := "bar-" + it.id
 	b := ui.ButtonBase(c.Key(key)).Width(barActionWidth(it)).Height(30).Radius(6).
 		Center().Gap(4).Label(it.tip).Tooltip(it.tip).Disabled(disabled)
 	switch {
 	case active:
-		b.Background(tbActive)
+		b.Background(tbActive(t))
 	case !disabled && b.Hovered():
-		b.Background(tbHover)
+		b.Background(tbHover(t))
 	}
 	if !disabled && b.Clicked() {
 		if it.isTool() {
