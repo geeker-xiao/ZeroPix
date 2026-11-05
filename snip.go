@@ -85,11 +85,22 @@ type snipSession struct {
 	mosaic   float32
 	blurSize float32
 
-	// The colour the eyedropper last took off the image, kept as an extra
+	// The colour the eyedropper last took off the image, kept as the mixed
 	// swatch so that the choice survives a few annotations.
 	customColor ui.Color
 	hasCustom   bool
 	pickedNote  string // the hex just taken, shown for a moment
+
+	// The picker the mixed swatch opens: where it was laid out, the colour
+	// it shows as hue, saturation and value, and which piece is held.
+	colorPanel   bool
+	panelRect    ui.Rect
+	panelSq      ui.Rect
+	panelHueRect ui.Rect
+	panelH       float64
+	panelS       float64
+	panelV       float64
+	panelHeld    int
 
 	// The family and size controls of the text editor keep their own state,
 	// as the widgets write into them.
@@ -134,6 +145,17 @@ var (
 	lastColor = annotationColors[0]
 )
 
+// isPresetColor reports whether c is one of the four dots the bar ships
+// with, rather than a colour the user mixed.
+func isPresetColor(c ui.Color) bool {
+	for _, p := range annotationColors {
+		if p == c {
+			return true
+		}
+	}
+	return false
+}
+
 // startSnip hides the app's windows, freezes the display under the cursor
 // and opens the overlay on it. full selects the whole screen at once.
 func startSnip(full bool) {
@@ -165,6 +187,10 @@ func startSnip(full bool) {
 			handle:   -1,
 			want:     ui.CursorCrosshair,
 			phase:    phaseSelect,
+			// The mixed swatch starts on the last colour, so a colour
+			// chosen once is still there on the next snip.
+			customColor: lastColor,
+			hasCustom:   !isPresetColor(lastColor),
 		}
 		s.frame = ui.Rect{W: float32(disp.Bounds.Width), H: float32(disp.Bounds.Height)}
 		s.scale = float64(shot.Bounds().Dx()) / float64(s.frame.W)
@@ -346,6 +372,15 @@ func (s *snipSession) input(ev ui.InputEvent) bool {
 			return false
 		}
 		s.cursor = ui.Point{X: ev.X, Y: ev.Y}
+		// The picker floats over the capture: a press inside it is its own,
+		// and one outside closes it before it draws anything.
+		if s.colorPanel {
+			if pointInRect(ev.X, ev.Y, s.panelRect) {
+				// The picker sits above the canvas: leave the press to it.
+				return false
+			}
+			s.colorPanel = false
+		}
 		if s.inFloating(ev.X, ev.Y) {
 			// The toolbar and the text field take their own presses; one
 			// that reached here fell on their padding.

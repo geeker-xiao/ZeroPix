@@ -6,6 +6,7 @@
 package main
 
 import (
+	"image/color"
 	"strings"
 
 	"github.com/egoist/mygo/ui"
@@ -97,6 +98,14 @@ func tbDivider(t *ui.Theme) ui.Color {
 		return ui.RGBA(255, 255, 255, 0.14)
 	}
 	return ui.RGBA(0x14, 0x1B, 0x23, 0.10)
+}
+
+// tbCaption is the small print beside the swatches: the colour in hex.
+func tbCaption(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0x8F, 0xA0, 0xB0)
+	}
+	return ui.RGB(0x5A, 0x68, 0x75)
 }
 
 // barItem is one button of the bar: a drawing tool, or an action.
@@ -221,8 +230,9 @@ func (it *barItem) isTool() bool { return it.drawing }
 
 // barGroups is the bar's content, split into the runs a divider separates:
 // the swatches, the tools, undo and redo, the capture actions, the actions
-// that finish the snip, and the settings button.
-func (s *snipSession) barGroups() [][]*barItem {
+// that finish the snip, and the settings button. A drawing tool puts the
+// swatches on a second line, under the tools they colour.
+func (s *snipSession) barGroups() []barGroup {
 	var tools, capture, finish []*barItem
 	for _, it := range barCatalog {
 		if !barEnabled(it.id) {
@@ -239,35 +249,57 @@ func (s *snipSession) barGroups() [][]*barItem {
 			tools = append(tools, it)
 		}
 	}
-	groups := [][]*barItem{s.swatchGroup()}
+	groups := []barGroup{}
 	if len(tools) > 0 {
-		groups = append(groups, tools)
+		groups = append(groups, barGroup{items: tools})
 	}
 	// Undo and redo keep their place even when a preset leaves them out.
 	var edit []*barItem
 	for _, id := range []string{"undo", "redo"} {
 		edit = append(edit, barItemByID(id))
 	}
-	groups = append(groups, edit)
+	groups = append(groups, barGroup{items: edit})
 	if len(capture) > 0 {
-		groups = append(groups, capture)
+		groups = append(groups, barGroup{items: capture})
 	}
-	groups = append(groups, finish)
+	groups = append(groups, barGroup{items: finish})
+	// The swatches close the bar on a line of their own, under the tools
+	// they colour, and only while one of those tools is in use.
+	if s.colorsOnOwnRow() && len(tools) > 0 {
+		groups = append(groups, barGroup{items: s.swatchGroup(), breakBefore: true})
+	} else {
+		groups = append([]barGroup{{items: s.swatchGroup()}}, groups...)
+	}
 	return groups
 }
 
-// swatchGroup is the colour dots, counted as buttons so that the layout
-// knows how much room they take.
-func (s *snipSession) swatchGroup() []*barItem {
-	n := len(annotationColors)
-	if s.hasCustom {
-		n++
+// colorsOnOwnRow reports whether the tool in use paints in the chosen
+// colour, and so wants the swatches on a line of their own rather than
+// mixed in with buttons that have nothing to do with colour.
+func (s *snipSession) colorsOnOwnRow() bool {
+	switch s.active {
+	case toolRect, toolEllipse, toolCircle, toolLine, toolArrow,
+		toolBrush, toolHighlighter, toolText, toolNumber:
+		return true
 	}
-	out := make([]*barItem, n)
+	return false
+}
+
+// swatchGroup is the colour dots, counted as buttons so that the layout
+// knows how much room they take: the four presets and the mixed colour.
+func (s *snipSession) swatchGroup() []*barItem {
+	out := make([]*barItem, len(annotationColors)+1)
 	for i := range out {
 		out[i] = &barItem{id: "swatch"}
 	}
 	return out
+}
+
+// barGroup is a run of buttons a divider sets apart from the next, and
+// whether it has to start a row of its own.
+type barGroup struct {
+	items       []*barItem
+	breakBefore bool
 }
 
 // barRow is one row of the finished bar.
@@ -291,21 +323,22 @@ func groupWidth(g []*barItem) float32 {
 // barRowGap is the gap a divider adds between two groups.
 const barRowGap = tbDivW + 2*tbDivMargin + tbGap
 
-// layoutBar packs the groups into rows no wider than maxW.
+// layoutBar packs the groups into rows no wider than maxW, honouring the
+// groups that ask for a row of their own.
 func (s *snipSession) layoutBar(maxW float32) []barRow {
 	groups := s.barGroups()
 	rows := []barRow{}
 	cur := barRow{}
 	for _, g := range groups {
-		if len(g) == 0 {
+		if len(g.items) == 0 {
 			continue
 		}
-		w := groupWidth(g)
+		w := groupWidth(g.items)
 		add := w
 		if len(cur.groups) > 0 {
 			add += barRowGap
 		}
-		if len(cur.groups) > 0 && cur.width+add > maxW {
+		if len(cur.groups) > 0 && (g.breakBefore || cur.width+add > maxW) {
 			rows = append(rows, cur)
 			cur = barRow{}
 			add = w
@@ -313,7 +346,7 @@ func (s *snipSession) layoutBar(maxW float32) []barRow {
 		if len(cur.groups) > 0 {
 			cur.width += barRowGap
 		}
-		cur.groups = append(cur.groups, g)
+		cur.groups = append(cur.groups, g.items)
 		cur.width += w
 	}
 	if len(cur.groups) > 0 {
@@ -348,11 +381,16 @@ func (s *snipSession) buildToolbar(c *ui.Context) {
 				s.buildRow(c, row)
 			}
 		})
+	s.colorPanelView(c)
 }
 
 // buildRow lays one row out: the swatches first, then each group behind a
 // divider.
 func (s *snipSession) buildRow(c *ui.Context, row barRow) {
+	if swatchRow(row) {
+		s.buildSwatchRow(c)
+		return
+	}
 	ui.Row(c).FillWidth().Height(tbRowH).Gap(tbGap).AlignItems(ui.Center).Children(func() {
 		for gi, g := range row.groups {
 			if gi > 0 {
@@ -369,15 +407,217 @@ func (s *snipSession) buildRow(c *ui.Context, row barRow) {
 	})
 }
 
+// swatchRow reports whether a row holds nothing but the colour dots.
+func swatchRow(row barRow) bool {
+	return len(row.groups) == 1 && len(row.groups[0]) > 0 && row.groups[0][0].id == "swatch"
+}
+
+// buildSwatchRow draws the line of colours: the four presets and the mixed
+// swatch at its left, the colour in hex at its right. Both ends carry
+// something, so the line does not end in a blank patch of sheet.
+func (s *snipSession) buildSwatchRow(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).FillWidth().Height(tbRowH).Gap(tbGap).AlignItems(ui.Center).
+		Justify(ui.SpaceBetween).Children(func() {
+		ui.Row(c).Gap(tbGap).AlignItems(ui.Center).Children(func() {
+			s.swatches(c)
+		})
+		ui.Text(c, strings.ToUpper(hexOf(color.RGBA{R: s.color.R, G: s.color.G, B: s.color.B, A: 255}))).
+			FontSize(12).Font("Consolas, 微软雅黑, monospace").TextColor(tbCaption(t))
+	})
+}
+
 // swatches draws the colour dots at the left of the first row: the four the
-// app ships with, and the colour the eyedropper last took.
+// app ships with, then the mixed colour, which opens a picker.
 func (s *snipSession) swatches(c *ui.Context) {
 	for i, col := range annotationColors {
 		s.colorButton(c, "color-"+itoa(i), col, annotationColorNames[i])
 	}
-	if s.hasCustom {
-		s.colorButton(c, "color-custom", s.customColor, "自定义颜色")
+	s.customButton(c)
+}
+
+// customButton is the last dot: it opens a picker for a colour the four
+// presets do not have, and wears that colour once one is chosen.
+func (s *snipSession) customButton(c *ui.Context) {
+	t := c.Theme()
+	on := s.hasCustom && s.color == s.customColor
+	b := ui.ButtonBase(c.Key("color-custom")).Width(tbSwatchW).Height(30).Radius(6).
+		Center().Label("自定义颜色").Tooltip("自定义颜色")
+	if b.Hovered() {
+		b.Background(tbHover(t))
 	}
+	if b.Clicked() {
+		s.colorPanel = !s.colorPanel
+		if s.colorPanel {
+			x := hsvOf(color.RGBA{R: s.customColor.R, G: s.customColor.G, B: s.customColor.B, A: 255})
+			if x.S == 0 {
+				x.H = s.panelH
+			}
+			s.panelH, s.panelS, s.panelV = x.H, x.S, x.V
+		}
+	}
+	b.Children(func() {
+		ui.Box(c).Width(16).Height(16).Draw(func(p *ui.Painter, r ui.Rect) {
+			if !s.hasCustom {
+				drawIcon(p, "palette", r, tbFore(t))
+				return
+			}
+			if on {
+				p.Fill(r, ui.RGBA(s.customColor.R, s.customColor.G, s.customColor.B, 0.24), 8)
+				p.Fill(ui.Rect{X: r.X + 2, Y: r.Y + 2, W: 12, H: 12}, s.customColor, 6)
+				p.Stroke(ui.Rect{X: r.X + 2, Y: r.Y + 2, W: 12, H: 12}, s.customColor, 6, 1)
+				return
+			}
+			p.Fill(ui.Rect{X: r.X + 3, Y: r.Y + 3, W: 10, H: 10}, s.customColor, 5)
+		})
+	})
+}
+
+// colorPanelView floats a picker beside the bar while the mixed swatch is
+// open: a square of saturation and brightness, a bar of hues, and the
+// colour in hex, in the bar's own sheet.
+func (s *snipSession) colorPanelView(c *ui.Context) {
+	if !s.colorPanel {
+		return
+	}
+	t := c.Theme()
+	const w, h = float32(248), float32(190)
+	x := min(max(s.barRect.X, 8), s.frame.W-w-8)
+	y := s.barRect.Y + s.barRect.H + 8
+	if y+h > s.frame.H-8 {
+		y = s.barRect.Y - h - 8
+	}
+	y = max(y, 8)
+	s.panelRect = ui.Rect{X: x, Y: y, W: w, H: h}
+	ui.Box(c).Absolute().Left(x).Top(y).Width(w).Height(h).Radius(10).Padding(12).
+		Background(tbBarColor(t)).Border(1, tbBarBorderColor(t)).
+		Shadow(0, 8, 26, 0, tbBarShadowColor(t)).
+		Children(func() {
+			ui.Column(c).Fill().Gap(8).Children(func() {
+				s.panelSquare(c)
+				s.panelHueBar(c)
+				ui.Text(c, strings.ToUpper(hexOf(color.RGBA{
+					R: s.customColor.R, G: s.customColor.G, B: s.customColor.B, A: 255,
+				}))).FontSize(12).Font("Consolas, 微软雅黑, monospace").TextColor(tbCaption(t))
+			})
+		})
+}
+
+// panelSquare is the square that takes saturation across and brightness up.
+func (s *snipSession) panelSquare(c *ui.Context) {
+	hue := hsvColor{H: s.panelH, S: 1, V: 1}.rgba()
+	sat, val := s.panelS, s.panelV
+	ui.Box(c).Width(224).Height(118).Radius(8).Cursor(ui.CursorCrosshair).
+		HandleInput(s.panelDrag(panelDragSquare)).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			s.panelSq = r
+			p.FillGradient(r, ui.LinearGradient{
+				From: ui.RGB(255, 255, 255), To: ui.RGBA(hue.R, hue.G, hue.B, 1), Angle: 90,
+			}, 8)
+			p.FillGradient(r, ui.LinearGradient{
+				From: ui.RGBA(0, 0, 0, 0), To: ui.RGB(0, 0, 0), Angle: 180,
+			}, 8)
+			cx := r.X + r.W*float32(sat)
+			cy := r.Y + r.H*float32(1-val)
+			p.Stroke(ui.Rect{X: cx - 7, Y: cy - 7, W: 14, H: 14}, ui.RGBA(0, 0, 0, 0.35), 7, 1)
+			p.Stroke(ui.Rect{X: cx - 5.5, Y: cy - 5.5, W: 11, H: 11}, ui.RGBA(255, 255, 255, 1), 5.5, 2)
+		})
+}
+
+// panelHueBar is the strip of hues under the square, red at either end.
+func (s *snipSession) panelHueBar(c *ui.Context) {
+	hues := []ui.Color{
+		ui.RGB(255, 0, 0), ui.RGB(255, 255, 0), ui.RGB(0, 255, 0),
+		ui.RGB(0, 255, 255), ui.RGB(0, 0, 255), ui.RGB(255, 0, 255), ui.RGB(255, 0, 0),
+	}
+	at := s.panelH / 360
+	ui.Box(c).Width(224).Height(12).Radius(6).Cursor(ui.CursorCrosshair).
+		HandleInput(s.panelDrag(panelDragHue)).
+		Draw(func(p *ui.Painter, r ui.Rect) {
+			s.panelHueRect = r
+			p.Clip(r, 6, func() {
+				seg := r.W / 6
+				for i := 0; i < 6; i++ {
+					p.FillGradient(ui.Rect{X: r.X + seg*float32(i), Y: r.Y, W: seg + 0.5, H: r.H},
+						ui.LinearGradient{From: hues[i], To: hues[i+1], Angle: 90}, 0)
+				}
+			})
+			x := min(max(r.X+r.W*float32(at), r.X+2), r.X+r.W-2)
+			p.Stroke(ui.Rect{X: x - 2, Y: r.Y - 2, W: 4, H: r.H + 4}, ui.RGBA(0, 0, 0, 0.30), 2, 1)
+			p.Stroke(ui.Rect{X: x - 1, Y: r.Y - 1, W: 2, H: r.H + 2}, ui.RGBA(255, 255, 255, 0.95), 1, 1)
+		})
+}
+
+// Where the pointer holds the picker, if anywhere.
+const (
+	panelDragNone = iota
+	panelDragSquare
+	panelDragHue
+)
+
+// panelDrag hands the square and the hue bar their drags.
+func (s *snipSession) panelDrag(target int) func(ui.InputEvent) bool {
+	return func(ev ui.InputEvent) bool {
+		switch ev.Kind {
+		case ui.InputPointerDown:
+			if ev.Button != 0 {
+				return false
+			}
+			s.panelHeld = target
+			s.panelPick(target, ev.X, ev.Y)
+			return true
+		case ui.InputPointerMove:
+			if s.panelHeld != target {
+				return false
+			}
+			s.panelPick(target, ev.X, ev.Y)
+			return true
+		case ui.InputPointerUp:
+			if s.panelHeld != target {
+				return false
+			}
+			s.panelHeld = panelDragNone
+			return true
+		}
+		return false
+	}
+}
+
+// panelPick takes the colour under a point of the picker, the coordinates
+// being those of the piece the press landed on.
+func (s *snipSession) panelPick(target int, x, y float32) {
+	switch target {
+	case panelDragSquare:
+		r := s.panelSq
+		if r.W <= 0 || r.H <= 0 {
+			return
+		}
+		s.panelS = clamp01(float64(x) / float64(r.W))
+		s.panelV = 1 - clamp01(float64(y)/float64(r.H))
+	case panelDragHue:
+		r := s.panelHueRect
+		if r.W <= 0 {
+			return
+		}
+		h := float64(x) / float64(r.W) * 360
+		if h >= 360 {
+			h = 359.9
+		}
+		s.panelH = h
+	default:
+		return
+	}
+	s.applyPanelColor()
+}
+
+// applyPanelColor puts the picker's colour on the snip.
+func (s *snipSession) applyPanelColor() {
+	c := hsvColor{H: s.panelH, S: s.panelS, V: s.panelV}.rgba()
+	s.customColor = ui.RGB(c.R, c.G, c.B)
+	s.hasCustom = true
+	s.color = s.customColor
+	lastColor = s.color
+	s.refresh()
 }
 
 func (s *snipSession) toolbarPos(w, h float32) (float32, float32) {
@@ -394,6 +634,9 @@ func (s *snipSession) toolbarPos(w, h float32) (float32, float32) {
 // editor, which the overlay's canvas leaves alone.
 func (s *snipSession) inFloating(x, y float32) bool {
 	if s.barRect.W > 0 && pointInRect(x, y, growRect(s.barRect, 2)) {
+		return true
+	}
+	if s.colorPanel && s.panelRect.W > 0 && pointInRect(x, y, s.panelRect) {
 		return true
 	}
 	if s.editorRect.W > 0 && pointInRect(x, y, s.editorRect) {
@@ -416,6 +659,7 @@ func (s *snipSession) colorButton(c *ui.Context, key string, col ui.Color, name 
 		b.Background(tbHover(c.Theme()))
 	}
 	if b.Clicked() {
+		s.colorPanel = false
 		s.color = col
 		lastColor = col
 	}
@@ -461,6 +705,7 @@ func (s *snipSession) barButton(c *ui.Context, it *barItem) {
 		b.Background(tbHover(t))
 	}
 	if !disabled && b.Clicked() {
+		s.colorPanel = false
 		if it.isTool() {
 			s.setTool(it.tool)
 		} else {
