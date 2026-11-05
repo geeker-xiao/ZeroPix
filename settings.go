@@ -374,6 +374,7 @@ func (w *settingsWindow) view(c *ui.Context) {
 		w.header(c, t)
 		ui.Row(c).Fill().Grow(1).Children(func() {
 			w.nav(c, t)
+			ui.Box(c).Width(1).FillHeight().Background(chromeBorder(t))
 			w.page(c, t)
 		})
 	})
@@ -381,19 +382,22 @@ func (w *settingsWindow) view(c *ui.Context) {
 
 // nav is the brand column: the mark above, then the numbered sections. It
 // stays ink in both appearances, so the dialog is recognisable at a glance.
+// nav is the brand column: the mark above, then the numbered sections. It is
+// the window's strongest surface in either appearance: ink in the dark theme,
+// a cool grey beside the paper in the light one.
 func (w *settingsWindow) nav(c *ui.Context, t *ui.Theme) {
 	ui.Column(c).Width(settingsNavW).FillHeight().Shrink(0).Gap(0).
-		Background(inkColor()).Children(func() {
+		Background(chromeColor(t)).Children(func() {
 		ui.Row(c).FillWidth().Padding(18, 14).Gap(10).AlignItems(ui.Center).Children(func() {
 			if bmp := appIconBitmap(); bmp != nil {
 				ui.Image(c, bmp).Width(32).Height(32)
 			}
 			ui.Column(c).Grow(1).Gap(3).Children(func() {
-				ui.Text(c, appName).FontSize(16).Bold().TextColor(onInkColor())
-				ui.Text(c, "SCREEN TOOLKIT").FontSize(10.5).TextColor(onInkMutedColor())
+				ui.Text(c, appName).FontSize(16).Bold().TextColor(onChromeColor(t))
+				ui.Text(c, "SCREEN TOOLKIT").FontSize(10.5).TextColor(onChromeMuted(t))
 			})
 		})
-		ui.Box(c).FillWidth().Height(1).Background(onInkSoftColor())
+		ui.Box(c).FillWidth().Height(1).Background(chromeBorder(t))
 		ui.Box(c).Height(10)
 		ui.Column(c).FillWidth().Padding(0, 8).Gap(3).Children(func() {
 			for i, sec := range settingsSections {
@@ -402,18 +406,21 @@ func (w *settingsWindow) nav(c *ui.Context, t *ui.Theme) {
 				b := ui.ButtonBase(c).FillWidth().Height(38).Radius(8).
 					Label("转到" + s.name)
 				if open {
-					b.Background(onInkSoftColor())
+					b.Background(chromeSelected(t))
+					if !t.Dark {
+						b.Border(1, chromeBorder(t))
+					}
 				} else if b.Hovered() {
-					b.Background(ui.RGBA(255, 255, 255, 0.045))
+					b.Background(chromeHover(t))
 				}
 				if b.Clicked() {
 					w.section = idx
 					w.refresh()
 				}
 				b.Children(func() {
-					col := onInkMutedColor()
+					col := onChromeMuted(t)
 					if open {
-						col = onInkColor()
+						col = onChromeColor(t)
 					}
 					ui.Row(c).FillWidth().Padding(10, 0).Gap(8).AlignItems(ui.Center).Children(func() {
 						bar := ui.Box(c).Width(3).Height(18).Radius(2)
@@ -421,11 +428,11 @@ func (w *settingsWindow) nav(c *ui.Context, t *ui.Theme) {
 							bar.Background(accentColor())
 						}
 						ui.Text(c, fmt.Sprintf("%02d", idx+1)).FontSize(11).
-							Font("Consolas, 微软雅黑, monospace").TextColor(ui.RGB(0x7E, 0xAB, 0xA1))
+							Font("Consolas, 微软雅黑, monospace").TextColor(chromeNumber(t))
 						ui.Box(c).Width(15).Height(15).Draw(func(p *ui.Painter, r ui.Rect) {
-							ic := onInkMutedColor()
+							ic := onChromeMuted(t)
 							if open {
-								ic = accentColor()
+								ic = chromeAccent(t)
 							}
 							drawIcon(p, s.icon, r, ic)
 						})
@@ -437,7 +444,7 @@ func (w *settingsWindow) nav(c *ui.Context, t *ui.Theme) {
 		ui.Box(c).Grow(1)
 		ui.Row(c).FillWidth().Padding(14, 16).Gap(7).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Width(6).Height(6).Radius(3).Background(accentColor())
-			ui.Text(c, "本机运行 · 无需联网").FontSize(10.5).TextColor(onInkMutedColor())
+			ui.Text(c, "本机运行 · 无需联网").FontSize(10.5).TextColor(onChromeMuted(t))
 		})
 	})
 }

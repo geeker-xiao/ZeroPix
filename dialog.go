@@ -40,41 +40,42 @@ func dialogWindow(title string, width, height, minWidth, minHeight int, stateKey
 	})
 }
 
-// dialogHeader is the band that stands in for the Windows title bar. It is
-// ink in both appearances: the mark, a title over a muted line, a close
-// button, and under them the accent rule that signs every ZeroPix window.
-// The band itself moves the window; "app" draws the program's icon.
+// dialogHeader is the band that stands in for the Windows title bar: the
+// mark, a title over a muted line, a close button, and under them the accent
+// rule that signs every ZeroPix window. The band is ink in the dark theme and
+// a cool light grey in the light one. It moves the window; "app" draws the
+// program's icon.
 func dialogHeader(c *ui.Context, t *ui.Theme, icon, title, subtitle, closeLabel string, onClose func()) {
 	ui.Column(c).FillWidth().Shrink(0).Children(func() {
 		ui.Row(c).FillWidth().Padding(15, 14).Gap(12).AlignItems(ui.Center).
-			Background(inkColor()).DragWindow().Children(func() {
+			Background(chromeColor(t)).DragWindow().Children(func() {
 			if icon == "app" {
 				if bmp := appIconBitmap(); bmp != nil {
 					ui.Image(c, bmp).Width(34).Height(34)
 				}
 			} else {
 				ui.Box(c).Width(34).Height(34).Radius(9).
-					Background(ui.RGBA(0, 0xC9, 0xA0, 0.14)).Children(func() {
+					Background(accentSoftColor(t)).Children(func() {
 					ui.Box(c).Fill().Padding(7).Draw(func(p *ui.Painter, r ui.Rect) {
-						drawIcon(p, icon, r, accentColor())
+						drawIcon(p, icon, r, chromeAccent(t))
 					})
 				})
 			}
 			ui.Column(c).Grow(1).Gap(2).Children(func() {
-				ui.Text(c, title).FontSize(15.5).Bold().TextColor(onInkColor())
-				ui.Text(c, subtitle).FontSize(11).TextColor(onInkMutedColor())
+				ui.Text(c, title).FontSize(15.5).Bold().TextColor(onChromeColor(t))
+				ui.Text(c, subtitle).FontSize(11).TextColor(onChromeMuted(t))
 			})
 			b := ui.ButtonBase(c).Width(26).Height(26).Radius(6).Label(closeLabel).
 				Tooltip("关闭 (Esc)")
 			if b.Hovered() {
-				b.Background(onInkHoverColor())
+				b.Background(chromeHover(t))
 			}
 			if b.Clicked() {
 				onClose()
 			}
 			b.Children(func() {
 				ui.Box(c).Fill().Padding(6).Draw(func(p *ui.Painter, r ui.Rect) {
-					drawIcon(p, "close", r, onInkMutedColor())
+					drawIcon(p, "close", r, onChromeMuted(t))
 				})
 			})
 		})

@@ -249,7 +249,7 @@ const swatchSide = 80
 // The colour window's size in DIPs, its header included.
 const (
 	colorWinW = 580
-	colorWinH = 520
+	colorWinH = 484
 )
 
 // colorWinTitle is what the header of the colour window says.
@@ -372,7 +372,7 @@ func showColorWindow(col color.RGBA) {
 	w.setColor(col, true)
 	// Frameless like the settings dialog, with the same header of its own:
 	// the title bar of Windows would cut the window off the sheet.
-	w.win = dialogWindow(colorWinTitle, colorWinW, colorWinH, 540, 500, "", w.view)
+	w.win = dialogWindow(colorWinTitle, colorWinW, colorWinH, 540, 450, "", w.view)
 	app.colorWin = w
 }
 
@@ -386,14 +386,10 @@ func (w *colorWindow) view(c *ui.Context) {
 	ui.Column(c).Fill().Background(pageBackground(t)).Children(func() {
 		w.header(c, t)
 		dialogBody(c, t, func() {
-			// The panel of saturation and value, the hue beside it, and the
-			// eyedropper under that.
+			// The panel of saturation and value, with the hue bar beside it.
 			ui.Row(c).Gap(8).AlignItems(ui.Start).Children(func() {
 				w.panelView(c)
-				ui.Column(c).Gap(7).Children(func() {
-					w.hueView(c)
-					w.pipette(c, t)
-				})
+				w.hueView(c)
 			})
 			// What was picked, what it is now, and a row for each channel.
 			// Every channel keeps its format on its right: RGB beside Red,
@@ -407,7 +403,6 @@ func (w *colorWindow) view(c *ui.Context) {
 					w.channelRow(c, t, "Blue", w.col.B, 2, "Hex", w.hex())
 				})
 			})
-			ui.Box(c).Grow(1)
 			// The line keeps its height whether or not it has anything to
 			// say, so that the buttons stay put after a copy.
 			note := w.note
@@ -458,7 +453,7 @@ func (w *colorWindow) hueView(c *ui.Context) {
 		ui.RGB(0, 255, 255), ui.RGB(0, 0, 255), ui.RGB(255, 0, 255), ui.RGB(255, 0, 0),
 	}
 	at := w.h / 360
-	ui.Box(c).Width(16).Height(172).Cursor(ui.CursorCrosshair).
+	ui.Box(c).Width(16).Height(196).Cursor(ui.CursorCrosshair).
 		HandleInput(w.pointer(holdHue)).
 		Draw(func(p *ui.Painter, r ui.Rect) {
 			w.hue = r
@@ -474,24 +469,6 @@ func (w *colorWindow) hueView(c *ui.Context) {
 			p.Stroke(ui.Rect{X: r.X - 2, Y: y - 2, W: r.W + 4, H: 4}, ui.RGBA(0, 0, 0, 0.30), 2, 1)
 			p.Stroke(ui.Rect{X: r.X - 1, Y: y - 1, W: r.W + 2, H: 2}, ui.RGBA(255, 255, 255, 0.95), 1, 1)
 		})
-}
-
-// pipette picks another colour off the screen, as the eyedropper of the
-// picker the window is modelled on.
-func (w *colorWindow) pipette(c *ui.Context, t *ui.Theme) {
-	b := ui.ButtonBase(c.Key("pick-again")).Width(16).Height(16).Radius(4).
-		Label("从屏幕重新拾取").Tooltip("从屏幕重新拾取")
-	if b.Hovered() {
-		b.Background(t.SurfaceHover)
-	}
-	if b.Clicked() {
-		startPick()
-	}
-	b.Children(func() {
-		ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {
-			drawIcon(p, "pipette", r, t.TextMuted)
-		})
-	})
 }
 
 // swatch is a patch of a colour under its name.

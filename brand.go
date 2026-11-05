@@ -1,7 +1,8 @@
-// ZeroPix's one palette. The brand band is ink in either appearance so the
-// windows are recognisable at a glance; only the paper underneath follows
-// the theme. Every coloured surface in the dialogs comes from here, so a
-// change of accent is one edit rather than a hunt through the views.
+// ZeroPix's one palette. The brand band follows the appearance: ink in the
+// dark theme, a cool light grey in the light one, so a light window does not
+// carry a black slab across its top. The page under it is always the colder
+// paper. Every coloured surface in the dialogs comes from here, so a change
+// of accent is one edit rather than a hunt through the views.
 
 package main
 
@@ -23,6 +24,77 @@ func onInkMutedColor() ui.Color { return ui.RGB(0x8F, 0xA0, 0xB0) }
 func onInkHoverColor() ui.Color { return ui.RGBA(255, 255, 255, 0.10) }
 
 func onInkSoftColor() ui.Color { return ui.RGBA(255, 255, 255, 0.07) }
+
+// chromeColor is the band that carries the brand: the title bar of every
+// dialog and the settings column. It is ink only in the dark appearance; in
+// the light one it is a cool grey a step below the paper, which keeps the
+// three levels of the window readable without a black field.
+func chromeColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return inkColor()
+	}
+	return ui.RGB(0xE9, 0xEF, 0xF3)
+}
+
+// onChromeColor is the title and the selected label on that band.
+func onChromeColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return onInkColor()
+	}
+	return inkColor()
+}
+
+// onChromeMuted is the subtitle, the unselected labels and the close icon.
+func onChromeMuted(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return onInkMutedColor()
+	}
+	return ui.RGB(0x5A, 0x68, 0x75)
+}
+
+// chromeHover is the face of a button under the pointer.
+func chromeHover(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return onInkHoverColor()
+	}
+	return ui.RGBA(0x11, 0x18, 0x20, 0.06)
+}
+
+// chromeSelected is the face of the open section: a lifted card in the light
+// band, a lighter patch of ink in the dark one.
+func chromeSelected(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return onInkSoftColor()
+	}
+	return ui.RGB(0xFF, 0xFF, 0xFF)
+}
+
+// chromeBorder draws the hairline between the band and the page, and around
+// the selected row.
+func chromeBorder(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(255, 255, 255, 0.10)
+	}
+	return ui.RGBA(0x11, 0x18, 0x20, 0.10)
+}
+
+// chromeAccent is the accent as an icon on the band: the pure teal reads on
+// ink, while the light band needs the darker one to hold its edge.
+func chromeAccent(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return accentColor()
+	}
+	return accentInkColor()
+}
+
+// chromeNumber is the small index beside a section name: a teal-grey on ink,
+// a plain cool grey on the light band.
+func chromeNumber(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0x7E, 0xAB, 0xA1)
+	}
+	return ui.RGB(0x6B, 0x7C, 0x8A)
+}
 
 func accentSoftColor(t *ui.Theme) ui.Color {
 	if t.Dark {
