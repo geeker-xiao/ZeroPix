@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CGO_ENABLED: "1"
+
+jobs:
+  windows:
+    name: Windows amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The OCR runtime binds through cgo, so the build needs a C compiler.
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc
+          path-type: inherit
+
+      - name: Put the compiler on PATH
+        shell: pwsh
+        run: |
+          "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          gcc --version
+
+      - name: Check and test
+        run: |
+          go vet ./...
+          go test -count=1 ./...
+
+      - name: Build the app and the installer
+        run: go tool mygo build -platform windows/amd64
+
+      - name: List what was built
+        shell: pwsh
+        run: Get-ChildItem build -Recurse -Filter *.exe | Select-Object FullName, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: zeropix-windows-amd64
+          path: |
+            build/windows-amd64/zeropix.exe
+            build/windows-amd64/*setup*.exe
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: windows
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeropix-windows-amd64
+          path: dist
+
+      - name: Take the notes for this tag from the changelog
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          awk -v tag="$tag" '
+            index($0, "## [" tag "]") == 1 { printing = 1; next }
+            printing && substr($0, 1, 4) == "## [" { exit }
+            printing { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            printf 'Changes in %s.\n' "$GITHUB_REF_NAME" > release-notes.md
+          fi
+          cat release-notes.md
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ZeroPix ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: dist/**/*.exe
+          fail_on_unmatched_files: true

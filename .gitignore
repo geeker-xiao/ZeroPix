@@ -12,9 +12,11 @@ mygo_windows_*.syso
 # Local-only work: design evidence, agent notes and scratch output.
 /.oil-ui/
 /.workbuddy/
+/dist/
 *.log
 .tmp_app.log
 .tmp_diag.log
+zeropix.exe~
 
 # Editor and OS noise
 .vscode/
