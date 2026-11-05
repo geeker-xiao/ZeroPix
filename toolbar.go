@@ -229,9 +229,8 @@ func barActionWidth(it *barItem) float32 {
 func (it *barItem) isTool() bool { return it.drawing }
 
 // barGroups is the bar's content, split into the runs a divider separates:
-// the swatches, the tools, undo and redo, the capture actions, the actions
-// that finish the snip, and the settings button. A drawing tool puts the
-// swatches on a second line, under the tools they colour.
+// the tools, undo and redo, the capture actions, the actions that finish the
+// snip, the settings button, and the swatches, which take the last line.
 func (s *snipSession) barGroups() []barGroup {
 	var tools, capture, finish []*barItem
 	for _, it := range barCatalog {
@@ -263,26 +262,11 @@ func (s *snipSession) barGroups() []barGroup {
 		groups = append(groups, barGroup{items: capture})
 	}
 	groups = append(groups, barGroup{items: finish})
-	// The swatches close the bar on a line of their own, under the tools
-	// they colour, and only while one of those tools is in use.
-	if s.colorsOnOwnRow() && len(tools) > 0 {
-		groups = append(groups, barGroup{items: s.swatchGroup(), breakBefore: true})
-	} else {
-		groups = append([]barGroup{{items: s.swatchGroup()}}, groups...)
-	}
+	// The swatches keep a line of their own, under the buttons that have
+	// nothing to do with colour. They stay there whichever tool is in use,
+	// so that picking one never makes the bar change shape under the hand.
+	groups = append(groups, barGroup{items: s.swatchGroup(), breakBefore: true})
 	return groups
-}
-
-// colorsOnOwnRow reports whether the tool in use paints in the chosen
-// colour, and so wants the swatches on a line of their own rather than
-// mixed in with buttons that have nothing to do with colour.
-func (s *snipSession) colorsOnOwnRow() bool {
-	switch s.active {
-	case toolRect, toolEllipse, toolCircle, toolLine, toolArrow,
-		toolBrush, toolHighlighter, toolText, toolNumber:
-		return true
-	}
-	return false
 }
 
 // swatchGroup is the colour dots, counted as buttons so that the layout
@@ -427,7 +411,7 @@ func (s *snipSession) buildSwatchRow(c *ui.Context) {
 	})
 }
 
-// swatches draws the colour dots at the left of the first row: the four the
+// swatches draws the colour dots at the left of their own line: the four the
 // app ships with, then the mixed colour, which opens a picker.
 func (s *snipSession) swatches(c *ui.Context) {
 	for i, col := range annotationColors {

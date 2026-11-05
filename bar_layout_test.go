@@ -15,24 +15,21 @@ func useTestToolbar(t *testing.T) {
 	t.Cleanup(func() { settings.Toolbar = old })
 }
 
-// While a drawing tool is in use the swatches take a line of their own,
-// under the tools they colour; with no such tool they sit in the first row.
-func TestColourRowGoesUnderTheTools(t *testing.T) {
+// The swatches keep the last line of the bar whichever tool is in use, so
+// that picking a tool never changes the shape of the bar under the hand.
+func TestColourRowIsAlwaysTheLastOne(t *testing.T) {
 	useTestToolbar(t)
 
-	s := &snipSession{active: toolSelect}
-	if rows := s.layoutBar(1200); len(rows) != 1 {
-		t.Fatalf("with no tool the bar has %d rows, want 1", len(rows))
-	}
-
+	s := &snipSession{}
 	for _, tl := range []tool{
-		toolRect, toolEllipse, toolCircle, toolLine, toolArrow,
-		toolBrush, toolHighlighter, toolText, toolNumber,
+		toolSelect, toolRect, toolEllipse, toolCircle, toolArrow, toolLine,
+		toolBrush, toolHighlighter, toolMosaic, toolBlur, toolSpotlight,
+		toolText, toolNumber,
 	} {
 		s.active = tl
 		rows := s.layoutBar(1200)
-		if len(rows) != 2 {
-			t.Fatalf("with tool %d the bar has %d rows, want 2", tl, len(rows))
+		if len(rows) < 2 {
+			t.Fatalf("with tool %d the bar has %d rows, want at least 2", tl, len(rows))
 		}
 		if !swatchRow(rows[len(rows)-1]) {
 			t.Fatalf("with tool %d the colour line is not the last row", tl)
