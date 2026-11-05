@@ -6,6 +6,7 @@
 [![Build](https://github.com/geeker-xiao/ZeroPix/actions/workflows/build.yml/badge.svg)](https://github.com/geeker-xiao/ZeroPix/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/v/release/geeker-xiao/ZeroPix)](https://github.com/geeker-xiao/ZeroPix/releases)
 [![Go](https://img.shields.io/badge/Go-1.24%2B-00ADD8)](https://go.dev)
+[![License](https://img.shields.io/github/license/geeker-xiao/ZeroPix)](LICENSE)
 
 ## 功能
 
@@ -151,4 +152,8 @@ ocr/           识别模型与字典（go:embed）
 
 ## 许可
 
-仓库尚未附许可协议，暂保留所有权利；如有使用需求请通过 Issue 联系作者。
+[MIT](LICENSE) © 2026 geeker-xiao
+
+可自由使用、修改、分发与商用，保留版权声明与许可声明即可。构建时嵌入的
+`ocr/` 资源另有来源与授权：PP-OCRv5 模型来自 PaddleOCR / PaddleX（Apache-2.0），
+推理运行时为 onnxruntime（MIT），详见 [ocr/README.txt](ocr/README.txt)。
