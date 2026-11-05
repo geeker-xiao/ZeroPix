@@ -100,10 +100,6 @@ go vet ./...
 go test -count=1 ./...
 ```
 
-CI 使用 `.github/workflows/build.yml`：每次推送到 `main` 会在 Windows 上编译并上传产物，
-推送 `v*` 标签会自动创建 Release 并把安装包与绿色版挂上去，
-发布说明取自 `CHANGELOG.md` 中对应版本号的段落。
-
 ## 项目结构
 
 ```
