@@ -123,7 +123,7 @@ func pinFromClipboard() {
 	}
 	x := int(math.Round(float64(pt.X)*scale)) - img.Bounds().Dx()/2
 	y := int(math.Round(float64(pt.Y)*scale)) - img.Bounds().Dy()/2
-	app.pinImageAt(img, x, y, scale, lastColor)
+	app.pinImageAt(img, x, y, scale, lastColor, 0)
 }
 
 // ocrClipboard recognizes (or translates) the image on the clipboard.

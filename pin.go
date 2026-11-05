@@ -26,7 +26,9 @@ type pinWindow struct {
 	baseW  float32 // the image at 100%, in DIPs
 	baseH  float32
 	zoom   float32
+	scale  float64  // the display's scale factor
 	border ui.Color // the frame around the image, in the annotation colour
+	radius float32  // the corners of the image at 100%, in DIPs
 }
 
 // pinBorder is how wide the frame around a pinned image is, in DIPs.
@@ -34,12 +36,13 @@ const pinBorder = 3
 
 // pinImageAt shows img in a new pin window whose top-left goes at (x, y) in
 // physical screen pixels. scale is the display's scale factor, border the
-// colour of the frame around it.
-func (a *zooApp) pinImageAt(img *image.RGBA, x, y int, scale float64, border ui.Color) {
+// colour of the frame around it, and radius the corners the image was cut
+// with, in DIPs at 100%.
+func (a *zooApp) pinImageAt(img *image.RGBA, x, y int, scale float64, border ui.Color, radius float32) {
 	if scale <= 0 {
 		scale = 1
 	}
-	p := &pinWindow{img: img, zoom: 1, border: border}
+	p := &pinWindow{img: img, zoom: 1, scale: scale, border: border, radius: max(radius, 0)}
 	p.baseW = float32(float64(img.Bounds().Dx()) / scale)
 	p.baseH = float32(float64(img.Bounds().Dy()) / scale)
 	dipX := int(math.Round(float64(x) / scale))
@@ -47,6 +50,8 @@ func (a *zooApp) pinImageAt(img *image.RGBA, x, y int, scale float64, border ui.
 	// Movable stays on: mygo turns WM_WINDOWPOSCHANGING into SWP_NOMOVE for
 	// windows that are not, which drops the placement below back to (0, 0).
 	// The frame has no caption, so only DragWindow moves it.
+	// The window is transparent so that the corners the image was cut with
+	// show the desktop, instead of the square of an opaque background.
 	p.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           "贴图",
 		X:               dipX,
@@ -54,20 +59,37 @@ func (a *zooApp) pinImageAt(img *image.RGBA, x, y int, scale float64, border ui.
 		Width:           int(p.winW() + 0.5),
 		Height:          int(p.winH() + 0.5),
 		Frameless:       true,
+		Transparent:     true,
 		AlwaysOnTop:     true,
 		SkipTaskbar:     true,
 		DisableResize:   true,
 		DisableMaximize: true,
 		DisableMinimize: true,
 		DisableShadow:   true,
-		BackgroundColor: "#000000",
 		Content:         ui.View(p.view),
 	})
 	if p.win == nil || p.win.IsDestroyed() {
 		a.toast("无法创建贴图窗口")
 		return
 	}
+	p.applyRegion()
 	a.pins = append(a.pins, p)
+}
+
+// applyRegion cuts the window to the corners the image was cut with, at the
+// zoom it shows: the window then has no square of its own around them.
+func (p *pinWindow) applyRegion() {
+	if p.win == nil || p.win.IsDestroyed() {
+		return
+	}
+	if p.radius <= 0 {
+		return
+	}
+	scale := float32(p.scale)
+	radius := (p.radius*p.zoom + pinBorder) * scale
+	w := int(p.winW()*scale + 0.5)
+	h := int(p.winH()*scale + 0.5)
+	roundWindow(p.win.NativeHandle(), w, h, radius)
 }
 
 // winW and winH are the window's size: the image at the current zoom plus
@@ -80,26 +102,47 @@ func (p *pinWindow) view(c *ui.Context) {
 		p.bmp = ui.NewBitmap(p.img)
 	}
 	c.OnShortcut(0, ui.KeyEscape, p.close)
+	// The window draws nothing of its own, so that the corners the image
+	// was cut with show the desktop.
+	c.Root().Background(ui.Transparent)
 	w := p.baseW * p.zoom
 	h := p.baseH * p.zoom
-	ui.Box(c).Fill().Children(func() {
-		// The frame is the window's own background, showing through the
-		// padding the image sits in.
-		ui.Box(c).Fill().Background(p.border).Padding(pinBorder).Children(func() {
-			ui.Box(c).Fill().HandleInput(p.input).Children(func() {
+	ui.Box(c).Fill().
+		Draw(func(paint *ui.Painter, r ui.Rect) { p.paintFrame(paint, r) }).
+		Children(func() {
+			// The image sits inside the frame, over a window that draws
+			// nothing behind it: the corners it was cut with stay clear.
+			ui.Box(c).Fill().Padding(pinBorder).HandleInput(p.input).Children(func() {
 				ui.Image(c, p.bmp).Width(w).Height(h).Fit(ui.FillBox).DragWindow()
 			})
-		})
-		// A close button stays in the corner, as Snipaste's pin shows on hover.
-		ui.ButtonBase(c).Absolute().Right(6).Top(6).Size(22, 22).Radius(4).
-			Label("关闭贴图").Tooltip("关闭 (Esc)").
-			Background(ui.RGBA(20, 20, 22, 0.68)).
-			OnClick(p.close).Children(func() {
-			ui.Box(c).Fill().Padding(5).Draw(func(paint *ui.Painter, r ui.Rect) {
-				drawIcon(paint, "close", r, ui.RGBA(255, 255, 255, 1))
+			// A close button stays in the corner, as Snipaste's pin shows on hover.
+			ui.ButtonBase(c).Absolute().Right(6).Top(6).Size(22, 22).Radius(4).
+				Label("关闭贴图").Tooltip("关闭 (Esc)").
+				Background(ui.RGBA(20, 20, 22, 0.68)).
+				OnClick(p.close).Children(func() {
+				ui.Box(c).Fill().Padding(5).Draw(func(paint *ui.Painter, r ui.Rect) {
+					drawIcon(paint, "close", r, ui.RGBA(255, 255, 255, 1))
+				})
 			})
 		})
-	})
+}
+
+// paintFrame draws the border around the image, round as the corners the
+// image was cut with: the line straddles the edge, so it fills the frame
+// without spilling outside the window.
+func (p *pinWindow) paintFrame(paint *ui.Painter, r ui.Rect) {
+	if p.border.A == 0 || r.W <= pinBorder || r.H <= pinBorder {
+		return
+	}
+	half := float32(pinBorder) / 2
+	edge := ui.Rect{
+		X: r.X + half,
+		Y: r.Y + half,
+		W: r.W - pinBorder,
+		H: r.H - pinBorder,
+	}
+	radius := p.radius*p.zoom + half
+	paint.Stroke(edge, p.border, radius, pinBorder)
 }
 
 func (p *pinWindow) input(ev ui.InputEvent) bool {
@@ -133,6 +176,7 @@ func (p *pinWindow) setZoom(z float32) {
 	}
 	p.zoom = z
 	p.win.SetContentSize(int(p.winW()+0.5), int(p.winH()+0.5))
+	p.applyRegion()
 }
 
 func (p *pinWindow) openMenu() {

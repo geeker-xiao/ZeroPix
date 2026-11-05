@@ -8,6 +8,7 @@ package main
 import (
 	"image/color"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -441,8 +442,20 @@ func (s *snipSession) buildOutputRow(c *ui.Context) {
 	if s.outW == 0 && s.outH == 0 {
 		s.syncOutput()
 	}
-	if s.radText == "" {
-		s.radText = "0"
+	// A field that is not being typed in shows the value in force: typing
+	// that was never committed leaves no stale number behind.
+	if s.focusKey != "out-w" {
+		s.outWText = itoa(int(s.outW + 0.5))
+	}
+	if s.focusKey != "out-h" {
+		s.outHText = itoa(int(s.outH + 0.5))
+	}
+	if s.focusKey != "corner" {
+		if s.radiusPx > 0 {
+			s.radText = itoa(int(s.radiusPx + 0.5))
+		} else {
+			s.radText = ""
+		}
 	}
 	ui.Row(c).FillWidth().Height(tbRowH).Gap(8).AlignItems(ui.Center).
 		Justify(ui.SpaceBetween).Children(func() {
@@ -450,6 +463,22 @@ func (s *snipSession) buildOutputRow(c *ui.Context) {
 		s.sizeFields(c)
 		s.cornerField(c)
 	})
+}
+
+// selectOnFocus makes a number field select what it holds the moment it
+// takes the keyboard, so that typing replaces the number instead of being
+// inserted into it, and a second Enter is never needed to see the result.
+func (s *snipSession) selectOnFocus(key string, field ui.Element, text string) {
+	if field.Focused() {
+		if s.focusKey != key {
+			s.focusKey = key
+			field.SetTextSelection(0, utf8.RuneCountInString(text))
+		}
+		return
+	}
+	if s.focusKey == key {
+		s.focusKey = ""
+	}
 }
 
 // aspectButtons are the presets; the one the region is held to is lit.
@@ -498,19 +527,21 @@ func (s *snipSession) sizeFields(c *ui.Context) {
 		if s.editing {
 			ui.Text(c, s.outWText).FontSize(12.5).TextColor(tbFore(t))
 		} else {
-			ui.TextInputBase(c.Key("out-w"), &s.outWText).Width(60).Height(24).
+			w := ui.TextInputBase(c.Key("out-w"), &s.outWText).Width(60).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
 				Placeholder("宽").Label("输出宽度").
 				Tooltip("输出宽度（像素），回车确认").OnSubmit(s.takeWidth)
+			s.selectOnFocus("out-w", w, s.outWText)
 		}
 		ui.Text(c, "×").FontSize(12).TextColor(tbCaption(t))
 		if s.editing {
 			ui.Text(c, s.outHText).FontSize(12.5).TextColor(tbFore(t))
 		} else {
-			ui.TextInputBase(c.Key("out-h"), &s.outHText).Width(60).Height(24).
+			h := ui.TextInputBase(c.Key("out-h"), &s.outHText).Width(60).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
 				Placeholder("高").Label("输出高度").
 				Tooltip("输出高度（像素），回车确认").OnSubmit(s.takeHeight)
+			s.selectOnFocus("out-h", h, s.outHText)
 		}
 		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
 	})
@@ -525,10 +556,11 @@ func (s *snipSession) cornerField(c *ui.Context) {
 		if s.editing {
 			ui.Text(c, s.radText).FontSize(12.5).TextColor(tbFore(t))
 		} else {
-			ui.TextInputBase(c.Key("corner"), &s.radText).Width(48).Height(24).
+			r := ui.TextInputBase(c.Key("corner"), &s.radText).Width(48).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
 				Placeholder("0").Label("圆角半径").
 				Tooltip("圆角半径（像素），回车确认").OnSubmit(s.takeRadius)
+			s.selectOnFocus("corner", r, s.radText)
 		}
 		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
 	})

@@ -120,6 +120,10 @@ type snipSession struct {
 	outWText string
 	outHText string
 	radText  string
+	// The field the bar's numbers last had the keyboard in: one that takes
+	// focus selects its text, so typing replaces the number instead of
+	// landing in the middle of it.
+	focusKey string
 
 	// In-place text entry.
 	editing    bool
@@ -1024,10 +1028,14 @@ func (s *snipSession) takeHeight() {
 	s.outHText = itoa(int(math.Round(s.outH)))
 }
 
-// takeRadius reads the corner radius typed into the bar: 0 keeps the
-// region square.
+// takeRadius reads the corner radius typed into the bar: 0, or an empty
+// field, keeps the region square.
 func (s *snipSession) takeRadius() {
-	if v, err := strconv.ParseFloat(strings.TrimSpace(s.radText), 64); err == nil && v >= 0 {
+	text := strings.TrimSpace(s.radText)
+	switch v, err := strconv.ParseFloat(text, 64); {
+	case text == "":
+		s.radiusPx = 0
+	case err == nil && v >= 0:
 		s.radiusPx = min(v, 400)
 	}
 	s.radText = itoa(int(math.Round(s.radiusPx)))
@@ -1206,6 +1214,7 @@ func (s *snipSession) finish(act snipAction) {
 		return
 	}
 	rx, ry, rw, rh := s.screenRect()
+	radius := s.cornerRadiusDip()
 	s.destroy()
 	switch act {
 	case actCopy:
@@ -1217,7 +1226,7 @@ func (s *snipSession) finish(act snipAction) {
 	case actSave:
 		go saveImageDialog(img)
 	case actPin:
-		app.pinImageAt(img, rx, ry, s.scale, s.color)
+		app.pinImageAt(img, rx, ry, s.scale, s.color, radius)
 	case actOCR:
 		showOCRResult(img)
 	case actTranslate:

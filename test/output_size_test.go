@@ -195,3 +195,54 @@ func TestAspectButtonReshapesTheRegion(t *testing.T) {
 		t.Fatalf("free resized the region from %v × %v to %v × %v", w, h, s.sel.W, s.sel.H)
 	}
 }
+
+// The corner field starts empty, its placeholder reading 0: typing a radius
+// then lands on a blank field instead of behind a zero.
+func TestCornerFieldStartsEmpty(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+	if s.radText != "" {
+		t.Fatalf("the corner field starts holding %q, want it empty", s.radText)
+	}
+	// An empty field commits to a square region.
+	s.radText = ""
+	s.takeRadius()
+	if s.radiusPx != 0 {
+		t.Fatalf("an empty corner field left %v", s.radiusPx)
+	}
+}
+
+// One Enter commits a typed size, and typing over a field that already holds
+// a number replaces it instead of appending to it.
+func TestOneEnterTakesTheTypedWidth(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+
+	if err := tt.Click("输出宽度"); err != nil {
+		t.Fatalf("the bar has no width field: %v", err)
+	}
+	tt.Type("900")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s.outW != 900 {
+		t.Fatalf("one Enter left the width at %v, want 900", s.outW)
+	}
+
+	// The field holds 900 now; a second edit replaces it.
+	if err := tt.Click("输出宽度"); err != nil {
+		t.Fatalf("the width field went away: %v", err)
+	}
+	tt.Frame()
+	tt.Type("300")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s.outW != 300 {
+		t.Fatalf("typing over 900 gave %v, want 300", s.outW)
+	}
+}
