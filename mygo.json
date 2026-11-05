@@ -1,0 +1,6 @@
+{
+  "name": "zeropix",
+  "identifier": "com.zeropix.app",
+  "version": "0.1.0",
+  "out": "build"
+}

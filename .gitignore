@@ -1,0 +1,23 @@
+# Generated binaries and installers. Rebuild with
+# CGO_ENABLED=1 go tool mygo build -platform windows/amd64
+/build/
+/.mygo/
+mygo_windows_*.syso
+# A bare `go build -o <name>.exe .` drops the binary in the repo root.
+/*.exe
+
+# Bundled at build time by go:embed, so these stay in the repository:
+# ocr/ (models, runtime, dictionaries) and resources/ (icons).
+
+# Local-only work: design evidence, agent notes and scratch output.
+/.oil-ui/
+/.workbuddy/
+*.log
+.tmp_app.log
+.tmp_diag.log
+
+# Editor and OS noise
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
