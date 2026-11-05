@@ -266,13 +266,16 @@ func (s *snipSession) buildToolbar(c *ui.Context) {
 		barW = max(barW, r.width)
 	}
 	barW += tbPadX * 2
-	barH := float32(len(rows))*tbRowH + float32(len(rows)-1)*tbRowGap + tbPadY*2
+	// The box includes its 1px hairline, so the rows plus the padding plus
+	// both edges fill it exactly; leaving the border out of the sum made the
+	// rows overflow by two pixels and pushed the buttons off centre.
+	barH := float32(len(rows))*tbRowH + float32(len(rows)-1)*tbRowGap + tbPadY*2 + 2
 
 	x, y := s.toolbarPos(barW, barH)
 	s.barRect = ui.Rect{X: x, Y: y, W: barW, H: barH}
 	ui.Column(c).Absolute().Left(x).Top(y).Width(barW).Height(barH).
-		Radius(10).Padding(tbPadX, tbPadY).Gap(tbRowGap).
-		Background(ui.RGBA(0x11, 0x18, 0x20, 0.97)).
+		Radius(10).Padding(tbPadY, tbPadX).Gap(tbRowGap).
+		Background(ui.RGBA(0x14, 0x1B, 0x23, 0.97)).
 		Border(1, ui.RGBA(255, 255, 255, 0.12)).
 		Shadow(0, 6, 22, 0, ui.RGBA(0, 0, 0, 0.30)).
 		Children(func() {

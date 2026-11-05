@@ -518,9 +518,9 @@ func (w *settingsWindow) actionsCard(c *ui.Context, t *ui.Theme) {
 				for j := i; j < min(i+2, len(actions)); j++ {
 					a := actions[j]
 					b := ui.ButtonBase(c).Grow(1).Height(34).Radius(8).Label(a.label).
-						Background(t.Surface).Border(1, groupBorder(t))
+						Background(cardColor(t)).Border(1, groupBorder(t))
 					if b.Hovered() {
-						b.Background(t.SurfaceHover)
+						b.Background(cardHoverColor(t))
 					}
 					if b.Clicked() {
 						a.act()
@@ -757,7 +757,7 @@ func (w *settingsWindow) barCheck(c *ui.Context, t *ui.Theme, it *barItem, on bo
 	b := ui.ButtonBase(c).Grow(1).Height(27).Radius(7).
 		Label("工具条：" + it.name).Tooltip(it.tip)
 	if b.Hovered() {
-		b.Background(t.SurfaceHover)
+		b.Background(cardHoverColor(t))
 	}
 	if b.Clicked() {
 		setBarEnabled(it.id, !on)
@@ -772,7 +772,7 @@ func (w *settingsWindow) barCheck(c *ui.Context, t *ui.Theme, it *barItem, on bo
 					drawIcon(p, "check", tick, inkColor())
 					return
 				}
-				p.Stroke(r, t.Border, 4, 1.2)
+				p.Stroke(r, fieldBorder(t), 4, 1.2)
 			})
 			ui.Text(c, it.name).FontSize(12.5).SingleLine()
 		})
@@ -889,7 +889,7 @@ func sectionSubtitle(title string) string {
 // card is one sheet: a numbered-looking header, the accent rule that signs
 // the brand, a hairline, then the rows. There is one per page, not a stack.
 func (w *settingsWindow) card(c *ui.Context, t *ui.Theme, icon, title string, body func()) {
-	ui.Column(c).FillWidth().Radius(12).Background(t.Surface).
+	ui.Column(c).FillWidth().Radius(12).Background(cardColor(t)).
 		Border(1, groupBorder(t)).Padding(18, 16).Gap(0).Children(func() {
 		ui.Row(c).FillWidth().Gap(10).AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Width(30).Height(30).Radius(9).
@@ -964,13 +964,13 @@ func (w *settingsWindow) hotkeyField(c *ui.Context, t *ui.Theme, row int) {
 		w.recRow, w.recTxt, w.note, w.noteOK = row+1, "", "", false
 	}
 	b.HandleInput(func(ev ui.InputEvent) bool { return w.recordKey(row, ev) })
-	b.Background(t.Surface)
+	b.Background(cardColor(t))
 	if recording {
 		b.Border(1, accentColor())
 	} else {
-		b.Border(1, t.Border)
+		b.Border(1, fieldBorder(t))
 		if b.Hovered() {
-			b.Background(t.SurfaceHover)
+			b.Background(cardHoverColor(t))
 		}
 	}
 	b.Children(func() {
@@ -1022,7 +1022,9 @@ func (w *settingsWindow) recordKey(row int, ev ui.InputEvent) bool {
 // background does not give in a light appearance: it is white, as they are.
 func pageBackground(t *ui.Theme) ui.Color {
 	if t.Dark {
-		return t.Background
+		// The page and the brand column are one field of ink in the dark
+		// theme; the sheets on top of it carry the layering.
+		return inkColor()
 	}
 	return ui.RGB(0xF5, 0xF7, 0xF9)
 }
@@ -1032,7 +1034,7 @@ func groupBorder(t *ui.Theme) ui.Color {
 	if t.Dark {
 		return ui.RGBA(255, 255, 255, 0.08)
 	}
-	return ui.RGBA(0x11, 0x18, 0x20, 0.07)
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.07)
 }
 
 // hintFill tints the notes of a group.

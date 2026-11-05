@@ -488,7 +488,7 @@ func (w *colorWindow) copyButton(c *ui.Context, t *ui.Theme, name, value string)
 	b := ui.ButtonBase(c.Key("copy-" + name)).Width(30).Height(28).Radius(7).
 		Center().Label("复制" + name).Tooltip("复制 " + value)
 	if b.Hovered() {
-		b.Background(t.SurfaceHover)
+		b.Background(cardHoverColor(t))
 	}
 	if b.Clicked() {
 		w.copyValue(value, name)
@@ -509,17 +509,17 @@ func (w *colorWindow) channelRow(c *ui.Context, t *ui.Theme, name string, v uint
 	ui.Row(c).Gap(6).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, name+":").Width(44).FontSize(12).TextColor(t.TextMuted)
 		ui.Box(c).Width(46).Height(26).Radius(6).Background(t.Surface).
-			Border(1, t.Border).Center().Children(func() {
+			Border(1, fieldBorder(t)).Center().Children(func() {
 			ui.Text(c, strconv.Itoa(int(v))).FontSize(12.5).Font("Consolas, 微软雅黑, monospace")
 		})
 		ui.Column(c).Children(func() {
 			w.spinner(c, t, idx, true)
 			w.spinner(c, t, idx, false)
 		})
-		ui.Box(c).Width(1).Height(20).Background(t.Border)
+		ui.Box(c).Width(1).Height(20).Background(fieldBorder(t))
 		ui.Text(c, fmtName+":").Width(34).FontSize(11.5).TextColor(t.TextMuted)
 		ui.Box(c).Grow(1).Height(28).Radius(6).Background(t.Surface).
-			Border(1, t.Border).Padding(8, 0).Clip().Center().Children(func() {
+			Border(1, fieldBorder(t)).Padding(8, 0).Clip().Center().Children(func() {
 			ui.Text(c, fmtValue).FontSize(11.5).Font("Consolas, 微软雅黑, monospace")
 		})
 		w.copyButton(c, t, fmtName, fmtValue)
@@ -538,7 +538,7 @@ func (w *colorWindow) spinner(c *ui.Context, t *ui.Theme, idx int, up bool) {
 	}
 	b := ui.ButtonBase(c.Key(fmt.Sprintf("spin-%d-%t", idx, up))).Width(18).Height(13).Radius(3).Label(name)
 	if b.Hovered() {
-		b.Background(t.SurfaceHover)
+		b.Background(cardHoverColor(t))
 	}
 	if b.Clicked() {
 		w.bump(idx, delta)

@@ -8,9 +8,37 @@ package main
 
 import "github.com/egoist/mygo/ui"
 
-func inkColor() ui.Color { return ui.RGB(0x11, 0x18, 0x20) }
+func inkColor() ui.Color { return ui.RGB(0x14, 0x1B, 0x23) }
 
-func inkHoverColor() ui.Color { return ui.RGB(0x1C, 0x28, 0x35) }
+func inkHoverColor() ui.Color { return ui.RGB(0x1F, 0x28, 0x33) }
+
+// cardColor is the sheet a section sits on. In the dark theme the page and
+// the brand column share one field of ink, so the sheets are a shade lifted
+// off it rather than the theme's neutral grey, which reads brownish beside
+// the teal.
+func cardColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0x1B, 0x24, 0x30)
+	}
+	return t.Surface
+}
+
+// cardHoverColor is a sheet, a secondary button or a field under the pointer.
+func cardHoverColor(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGB(0x22, 0x2C, 0x39)
+	}
+	return t.SurfaceHover
+}
+
+// fieldBorder is the hairline around an input in the dark theme; the theme's
+// own border is a warm grey that fights the cool field.
+func fieldBorder(t *ui.Theme) ui.Color {
+	if t.Dark {
+		return ui.RGBA(255, 255, 255, 0.14)
+	}
+	return t.Border
+}
 
 func accentColor() ui.Color { return ui.RGB(0x00, 0xC9, 0xA0) }
 
@@ -57,7 +85,7 @@ func chromeHover(t *ui.Theme) ui.Color {
 	if t.Dark {
 		return onInkHoverColor()
 	}
-	return ui.RGBA(0x11, 0x18, 0x20, 0.06)
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.06)
 }
 
 // chromeSelected is the face of the open section: a lifted card in the light
@@ -75,7 +103,7 @@ func chromeBorder(t *ui.Theme) ui.Color {
 	if t.Dark {
 		return ui.RGBA(255, 255, 255, 0.10)
 	}
-	return ui.RGBA(0x11, 0x18, 0x20, 0.10)
+	return ui.RGBA(0x14, 0x1B, 0x23, 0.10)
 }
 
 // chromeAccent is the accent as an icon on the band: the pure teal reads on
