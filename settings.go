@@ -494,7 +494,7 @@ func (w *settingsWindow) actionsCard(c *ui.Context, t *ui.Theme) {
 			main.act()
 		}
 		mb.Children(func() {
-			ui.Row(c).Fill().Padding(14, 0).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Fill().Padding(14, 18).Gap(12).AlignItems(ui.Center).Children(func() {
 				ui.Box(c).Width(3).Height(24).Radius(2).Background(accentColor())
 				ui.Column(c).Grow(1).Gap(3).Children(func() {
 					ui.Text(c, main.label).FontSize(14).Bold().TextColor(onInkColor())
