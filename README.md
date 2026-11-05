@@ -100,8 +100,22 @@ gcc --version
 检查与测试：
 
 ```bash
-go vet ./...
-go test -count=1 ./...
+bash test/run.sh                     # 放出测试文件 → go vet → go test → 收回
+bash test/run.sh -run TestToolbar -v # 其余参数原样交给 go test
+```
+
+Go 要求 `_test.go` 与被测包在同一个目录，而 `package main` 又不能被别的包导入，
+所以测试文件无法真正放进一个独立的包目录里。这里的做法是：13 个测试文件常驻
+`test/`，仓库根目录保持干净；需要测试时由脚本把它们临时移到根目录，跑完（包括
+失败或 `Ctrl+C`）再自动收回。因此 GitHub 上的测试代码始终只在 `test/` 下，
+根目录不会出现平铺的 `_test.go`（`.gitignore` 也挡住了误提交）。
+
+不想用 bash 时，手工两步等价（PowerShell）：
+
+```powershell
+Move-Item test\*_test.go .
+go vet .; go test -count=1 .
+Move-Item *_test.go test\
 ```
 
 ## 项目结构
@@ -121,6 +135,7 @@ translate.go   翻译与智能脱敏
 gifrec.go      GIF 与视频录制
 pin.go         贴图窗口
 icons.go       图标
+test/          测试代码（test/run.sh 临时放回根目录运行）
 resources/     应用与托盘图标（go:embed）
 ocr/           识别模型与字典（go:embed）
 ```

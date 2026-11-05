@@ -39,10 +39,11 @@ jobs:
           "C:\msys64\mingw64\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           gcc --version
 
+      # The tests live in test/; the script moves them back into the package
+      # directory (Go requires it), runs vet and test, then puts them away.
       - name: Check and test
-        run: |
-          go vet ./...
-          go test -count=1 ./...
+        shell: bash
+        run: bash test/run.sh
 
       - name: Build the app and the installer
         run: go tool mygo build -platform windows/amd64

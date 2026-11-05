@@ -4,6 +4,13 @@
 [语义化版本](https://semver.org/lang/zh-CN/)。
 发布时 GitHub Release 的说明会自动取用对应版本号下的段落。
 
+## [Unreleased]
+
+### 变更
+
+- 测试文件集中到 `test/`，由 `test/run.sh` 在测试时临时放回仓库根目录、跑完收回；
+  `go vet` / `go test` 只针对当前包，根目录不再平铺 13 个 `_test.go`。
+
 ## [0.1.2] - 2026-11-05
 
 ### 新增
@@ -48,5 +55,6 @@
 - 主按钮文字左右贴边，缺少水平留白。
 - 取色面板弹出后被画布抢占点击，面板内无法选色。
 
+[Unreleased]: https://github.com/geeker-xiao/ZeroPix/compare/v0.1.2...HEAD
 [0.1.2]: https://github.com/geeker-xiao/ZeroPix/releases/tag/v0.1.2
 [0.1.0]: https://github.com/geeker-xiao/ZeroPix/releases/tag/v0.1.0

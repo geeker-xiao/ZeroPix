@@ -18,6 +18,10 @@ mygo_windows_*.syso
 .tmp_diag.log
 zeropix.exe~
 
+# Tests live in test/ and return to the root only while running
+# (bash test/run.sh), so a stray copy here is never meant to be committed.
+/*_test.go
+
 # Editor and OS noise
 .vscode/
 .idea/
