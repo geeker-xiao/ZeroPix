@@ -137,12 +137,19 @@ var (
 		ui.RGB(0x8B, 0x5A, 0x2B), // 棕
 	}
 	annotationColorNames = []string{"红色", "绿色", "蓝黑色", "棕色"}
+	// The pen widths the bar offers, thin to thick. A new snip starts on the
+	// second one, which is also what a shape falls back to.
+	annotationWidths     = []float32{1.5, 2.5, 4, 6.5}
+	annotationWidthNames = []string{"细", "标准", "中粗", "粗"}
 	snipDim              = ui.RGBA(0, 0, 0, 0.45)
 	snipAccent           = ui.RGBA(0x00, 0xC9, 0xA0, 1)
 
 	// lastColor is the swatch in use, so that a pin takes the frame of the
 	// snip it came from, and one from the clipboard the last one picked.
 	lastColor = annotationColors[0]
+	// lastWidth is the pen width in use, kept from one snip to the next the
+	// same way the colour is.
+	lastWidth = annotationWidths[1]
 )
 
 // isPresetColor reports whether c is one of the four dots the bar ships
@@ -179,7 +186,7 @@ func startSnip(full bool) {
 			shot:     shot,
 			active:   toolSelect,
 			color:    lastColor,
-			width:    2.5,
+			width:    lastWidth,
 			fontSize: 16,
 			font:     defaultFamily(),
 			mosaic:   12,

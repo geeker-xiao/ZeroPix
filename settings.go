@@ -31,6 +31,10 @@ const (
 	appInk    = "#111820"
 	appAccent = "#00C9A0"
 	appPaper  = "#F5F7F9"
+
+	// Where the project lives, shown and opened from the about card.
+	appRepoURL   = "https://github.com/geeker-xiao/ZeroPix"
+	appRepoShort = "github.com/geeker-xiao/ZeroPix"
 )
 
 // legacySlugs are the names this app shipped under, newest first. Each one's
@@ -686,6 +690,10 @@ func (w *settingsWindow) appearanceCard(c *ui.Context, t *ui.Theme) {
 // Nothing about the app itself: the header above already says its name.
 func (w *settingsWindow) aboutCard(c *ui.Context, t *ui.Theme) {
 	w.card(c, t, "info", "关于软件", func() {
+		w.row(c, t, "版本", appVersionLabel(), func() {})
+		w.row(c, t, "项目主页", "源码、问题反馈与历史版本", func() {
+			ui.Link(c, appRepoShort, appRepoURL)
+		})
 		configDir := filepath.Dir(settingsFile())
 		w.row(c, t, "配置文件", configDir, func() {
 			ui.Button(c, "打开目录").Height(28).OnClick(func() { openFolder(configDir) })
@@ -696,6 +704,27 @@ func (w *settingsWindow) aboutCard(c *ui.Context, t *ui.Theme) {
 		w.row(c, t, "开发语言", goVersion(), func() {})
 	})
 }
+
+//go:embed mygo.json
+var appManifest []byte
+
+// appVersion is the version this build carries: the packaged one when the
+// app runs from a bundle, and mygo.json's otherwise.
+func appVersion() string {
+	if v := mygo.App.Version(); v != "" {
+		return v
+	}
+	var m struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(appManifest, &m); err == nil && m.Version != "" {
+		return m.Version
+	}
+	return "未知"
+}
+
+// appVersionLabel is the version as the dialog shows it.
+func appVersionLabel() string { return "v" + appVersion() }
 
 // refresh asks for a frame after the dialog changed what it shows.
 func (w *settingsWindow) refresh() {

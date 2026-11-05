@@ -167,7 +167,8 @@ func TestSettingsWindowRows(t *testing.T) {
 
 	// About says where the files are and what the app is written in, and
 	// nothing it already says in the header.
-	open("关于软件", "配置文件", "识别资源", "开发语言", goVersion())
+	open("关于软件", "配置文件", "识别资源", "开发语言", goVersion(),
+		"版本", appVersionLabel(), "项目主页", appRepoShort)
 	for _, gone := range []string{"运行环境", runtime.GOOS + "/" + runtime.GOARCH} {
 		if tt.HasText(gone) {
 			t.Errorf("about still shows %q", gone)

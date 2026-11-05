@@ -397,18 +397,64 @@ func swatchRow(row barRow) bool {
 }
 
 // buildSwatchRow draws the line of colours: the four presets and the mixed
-// swatch at its left, the colour in hex at its right. Both ends carry
-// something, so the line does not end in a blank patch of sheet.
+// swatch at its left, then the pen widths, the colour in hex at its right.
+// Both ends carry something, so the line does not end in a blank patch of
+// sheet.
 func (s *snipSession) buildSwatchRow(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().Height(tbRowH).Gap(tbGap).AlignItems(ui.Center).
 		Justify(ui.SpaceBetween).Children(func() {
 		ui.Row(c).Gap(tbGap).AlignItems(ui.Center).Children(func() {
 			s.swatches(c)
+			s.toolbarDivider(c)
+			s.widthButtons(c)
 		})
 		ui.Text(c, strings.ToUpper(hexOf(color.RGBA{R: s.color.R, G: s.color.G, B: s.color.B, A: 255}))).
 			FontSize(12).Font("Consolas, 微软雅黑, monospace").TextColor(tbCaption(t))
 	})
+}
+
+// widthButtons draws the pen widths beside the colours: a dot per step, its
+// size showing the stroke it gives, so that a brush can be told from a pen
+// before anything is drawn.
+func (s *snipSession) widthButtons(c *ui.Context) {
+	for i, w := range annotationWidths {
+		s.widthButton(c, "width-"+itoa(i), w, annotationWidthNames[i])
+	}
+}
+
+// widthButton is one step of the pen widths.
+func (s *snipSession) widthButton(c *ui.Context, key string, w float32, name string) {
+	t := c.Theme()
+	on := s.width == w
+	b := ui.ButtonBase(c.Key(key)).Width(tbSwatchW).Height(30).Radius(6).
+		Center().Label(name).Tooltip(name + "线宽（画笔与描边）")
+	if b.Hovered() {
+		b.Background(tbHover(t))
+	}
+	if on {
+		b.Background(tbActive(t))
+	}
+	if b.Clicked() {
+		s.pickWidth(w)
+	}
+	b.Children(func() {
+		ui.Box(c).Width(16).Height(16).Draw(func(p *ui.Painter, r ui.Rect) {
+			d := min(4+w*1.9, 15)
+			dot := ui.Rect{X: r.X + (r.W-d)/2, Y: r.Y + (r.H-d)/2, W: d, H: d}
+			ink := tbFore(t)
+			if on {
+				ink = tbAccent(t)
+			}
+			p.Fill(dot, ink, d/2)
+		})
+	})
+}
+
+// pickWidth puts a pen width on the snip, and remembers it for the next one.
+func (s *snipSession) pickWidth(w float32) {
+	s.width = w
+	lastWidth = w
 }
 
 // swatches draws the colour dots at the left of their own line: the four the

@@ -41,11 +41,35 @@ func TestColourRowIsAlwaysTheLastOne(t *testing.T) {
 }
 
 // The line carries the four presets and, after them, the mixed colour that
-// opens the picker.
+// opens the picker, plus one dot per pen width.
 func TestSwatchGroupKeepsTheCustomDot(t *testing.T) {
 	s := &snipSession{}
 	if got, want := len(s.swatchGroup()), len(annotationColors)+1; got != want {
 		t.Fatalf("the colour line has %d dots, want %d", got, want)
+	}
+	if len(annotationWidths) != len(annotationWidthNames) {
+		t.Fatalf("%d widths but %d names", len(annotationWidths), len(annotationWidthNames))
+	}
+	if len(annotationWidths) < 3 {
+		t.Fatalf("only %d widths to choose from", len(annotationWidths))
+	}
+	for i := 1; i < len(annotationWidths); i++ {
+		if annotationWidths[i] <= annotationWidths[i-1] {
+			t.Fatalf("the widths are not in order: %v", annotationWidths)
+		}
+	}
+}
+
+// Choosing a width puts it on the snip and keeps it for the next one, the
+// way the colour is kept.
+func TestPickingAWidthKeepsItForTheNextSnip(t *testing.T) {
+	s := &snipSession{width: annotationWidths[1]}
+	s.pickWidth(annotationWidths[3])
+	if s.width != annotationWidths[3] {
+		t.Fatalf("the snip draws at %v, want %v", s.width, annotationWidths[3])
+	}
+	if lastWidth != annotationWidths[3] {
+		t.Fatalf("the next snip starts at %v, want %v", lastWidth, annotationWidths[3])
 	}
 }
 
