@@ -246,3 +246,130 @@ func TestOneEnterTakesTheTypedWidth(t *testing.T) {
 		t.Fatalf("typing over 900 gave %v, want 300", s.outW)
 	}
 }
+
+// A square region leaves the corner field blank, so that a radius typed into
+// it is never glued onto a zero: 4 stays 4 instead of becoming 40.
+func TestCornerFieldStaysBlankAtZero(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+
+	if err := tt.Click("圆角半径"); err != nil {
+		t.Fatalf("the bar has no corner field: %v", err)
+	}
+	tt.Type("4")
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s.radiusPx != 4 {
+		t.Fatalf("typing 4 gave %v corners", s.radiusPx)
+	}
+	if s.radText != "4" {
+		t.Fatalf("the field shows %q after 4, want \"4\"", s.radText)
+	}
+
+	// Clearing the field and committing makes the region square again, and
+	// the field goes back to blank rather than to a literal zero.
+	if err := tt.Click("圆角半径"); err != nil {
+		t.Fatalf("the corner field went away: %v", err)
+	}
+	tt.Frame()
+	for i := 0; i < 4; i++ {
+		tt.Key(0, ui.KeyBackspace)
+	}
+	tt.Key(0, ui.KeyEnter)
+	tt.Frame()
+	if s.radiusPx != 0 {
+		t.Fatalf("an emptied field left %v corners", s.radiusPx)
+	}
+	if s.radText != "" {
+		t.Fatalf("the emptied field shows %q, want blank", s.radText)
+	}
+}
+
+// The arrows beside a number step it by one pixel, and stop at the limits.
+func TestStepperNudgesTheNumbers(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+
+	w := s.outW
+	if err := tt.Click("增大宽度"); err != nil {
+		t.Fatalf("the bar has no width stepper: %v", err)
+	}
+	tt.Frame()
+	if s.outW != w+1 {
+		t.Fatalf("one press on + gave %v, want %v", s.outW, w+1)
+	}
+	if s.outWText != itoa(int(s.outW)) {
+		t.Fatalf("the field shows %q for %v", s.outWText, s.outW)
+	}
+
+	// A square region does not go negative.
+	if err := tt.Click("减小圆角"); err != nil {
+		t.Fatalf("the bar has no corner stepper: %v", err)
+	}
+	tt.Frame()
+	if s.radiusPx != 0 {
+		t.Fatalf("minus at zero left %v", s.radiusPx)
+	}
+	for i := 0; i < 3; i++ {
+		if err := tt.Click("增大圆角"); err != nil {
+			t.Fatalf("the corner stepper went away: %v", err)
+		}
+		tt.Frame()
+	}
+	if s.radiusPx != 3 {
+		t.Fatalf("three presses on + gave %v corners, want 3", s.radiusPx)
+	}
+	if s.radText != "3" {
+		t.Fatalf("the corner field shows %q, want \"3\"", s.radText)
+	}
+}
+
+// The mixed-colour button always wears the palette mark: the swatch behind it
+// lights up instead of the icon turning into a colour chip.
+func TestCustomColourKeepsThePaletteMark(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	s.customColor, s.hasCustom, s.color = ui.RGB(200, 30, 60), true, ui.RGB(200, 30, 60)
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+
+	// The button is still reachable under its own name, and the picker opens
+	// on click, as it does while no colour is mixed yet.
+	if err := tt.Click("自定义颜色"); err != nil {
+		t.Fatalf("the mixed-colour button went away: %v", err)
+	}
+	tt.Frame()
+	if !s.colorPanel {
+		t.Fatal("the picker did not open")
+	}
+}
+
+// A number typed but not committed still counts: leaving the field for an
+// arrow commits it, and the arrow builds on it.
+func TestStepperContinuesFromTypedText(t *testing.T) {
+	s := newTestSession()
+	s.sel = ui.Rect{X: 100, Y: 100, W: 400, H: 300}
+	s.hasSel, s.phase = true, phaseEdit
+	tt := ui.NewTester(s.view, 1280, 800)
+	tt.Frame()
+
+	if err := tt.Click("输出宽度"); err != nil {
+		t.Fatalf("the bar has no width field: %v", err)
+	}
+	tt.Frame()
+	tt.Type("900")
+	if err := tt.Click("增大宽度"); err != nil {
+		t.Fatalf("the width stepper went away: %v", err)
+	}
+	tt.Frame()
+	if s.outW != 901 {
+		t.Fatalf("typed 900 then + gave %v, want 901", s.outW)
+	}
+}

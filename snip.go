@@ -1038,8 +1038,51 @@ func (s *snipSession) takeRadius() {
 	case err == nil && v >= 0:
 		s.radiusPx = min(v, 400)
 	}
-	s.radText = itoa(int(math.Round(s.radiusPx)))
+	s.radText = s.radiusText()
 	s.refresh()
+}
+
+// radiusText is what the corner field shows. A square region leaves it
+// blank, so that a number typed into the field is never appended to a zero
+// that was not the user's.
+func (s *snipSession) radiusText() string {
+	if s.radiusPx <= 0 {
+		return ""
+	}
+	return itoa(int(math.Round(s.radiusPx)))
+}
+
+// bumpWidth and bumpHeight step the size by whole output pixels. Whatever
+// sits in the field is taken first, so the arrows continue from a number
+// that has not been committed yet.
+func (s *snipSession) bumpWidth(d int) {
+	s.outW = typedNumber(s.outWText, s.outW, 8)
+	s.outW = min(max(s.outW+float64(d), 8), 20000)
+	s.applyWidth()
+}
+
+func (s *snipSession) bumpHeight(d int) {
+	s.outH = typedNumber(s.outHText, s.outH, 8)
+	s.outH = min(max(s.outH+float64(d), 8), 20000)
+	s.applyHeight()
+}
+
+// bumpRadius steps the corner radius the same way: 0 leaves the region
+// square.
+func (s *snipSession) bumpRadius(d int) {
+	s.radiusPx = typedNumber(s.radText, s.radiusPx, 0)
+	s.radiusPx = min(max(s.radiusPx+float64(d), 0), 400)
+	s.radText = s.radiusText()
+	s.refresh()
+}
+
+// typedNumber is the number a field holds when it parses and is not below
+// the smallest allowed, and the value in force otherwise.
+func typedNumber(text string, fallback float64, low float64) float64 {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(text), 64); err == nil && v >= low {
+		return v
+	}
+	return fallback
 }
 
 // aspectRatio is the aspect the region is held to, or 0 when it is free.

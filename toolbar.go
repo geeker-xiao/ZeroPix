@@ -451,11 +451,7 @@ func (s *snipSession) buildOutputRow(c *ui.Context) {
 		s.outHText = itoa(int(s.outH + 0.5))
 	}
 	if s.focusKey != "corner" {
-		if s.radiusPx > 0 {
-			s.radText = itoa(int(s.radiusPx + 0.5))
-		} else {
-			s.radText = ""
-		}
+		s.radText = s.radiusText()
 	}
 	ui.Row(c).FillWidth().Height(tbRowH).Gap(8).AlignItems(ui.Center).
 		Justify(ui.SpaceBetween).Children(func() {
@@ -465,10 +461,11 @@ func (s *snipSession) buildOutputRow(c *ui.Context) {
 	})
 }
 
-// selectOnFocus makes a number field select what it holds the moment it
-// takes the keyboard, so that typing replaces the number instead of being
-// inserted into it, and a second Enter is never needed to see the result.
-func (s *snipSession) selectOnFocus(key string, field ui.Element, text string) {
+// numberFocus makes a number field select what it holds the moment it takes
+// the keyboard, so that typing replaces the number instead of being inserted
+// into it. Leaving the field commits what was typed: a click elsewhere must
+// not quietly throw the number away.
+func (s *snipSession) numberFocus(key string, field ui.Element, text string, commit func()) {
 	if field.Focused() {
 		if s.focusKey != key {
 			s.focusKey = key
@@ -478,7 +475,54 @@ func (s *snipSession) selectOnFocus(key string, field ui.Element, text string) {
 	}
 	if s.focusKey == key {
 		s.focusKey = ""
+		commit()
 	}
+}
+
+// stepper is the arrow pair beside a number field: one pixel per press, so a
+// size or a radius can be nudged without retyping it. What sits in the field
+// is taken first, so "+" continues from a number that has not been committed.
+func (s *snipSession) stepper(c *ui.Context, key, noun string, bump func(delta int)) {
+	t := c.Theme()
+	ui.Column(c).Width(16).Height(24).Gap(1).Children(func() {
+		for i, delta := range []int{1, -1} {
+			name := "增大" + noun
+			if delta < 0 {
+				name = "减小" + noun
+			}
+			b := ui.ButtonBase(c.Key(key + "-step-" + itoa(i))).
+				Width(16).Height(11).Radius(3).Label(name).
+				Tooltip(name + " 1 像素")
+			if b.Hovered() {
+				b.Background(tbHover(t))
+			}
+			if b.Clicked() {
+				bump(delta)
+			}
+			b.Children(func() {
+				ui.Box(c).Fill().Draw(func(p *ui.Painter, r ui.Rect) {
+					// A stepped triangle reads far better than a stroked
+					// icon in a box this small.
+					cx, cy := r.X+r.W/2, r.Y+r.H/2
+					// The two arrows lean towards each other, so that the
+					// pair reads as one control rather than two buttons.
+					shift := float32(1.5)
+					if delta < 0 {
+						shift = -1.5
+					}
+					ink := tbCaption(t)
+					for i := 0; i < 5; i++ {
+						y := cy - 2.5 + shift + float32(i)
+						wd := 2 + float32(i)*1.6
+						if delta < 0 {
+							wd = 8.4 - float32(i)*1.6
+						}
+						p.Fill(ui.Rect{X: cx - wd/2, Y: y, W: wd, H: 1}, ink, 0)
+					}
+				})
+			})
+		}
+	})
 }
 
 // aspectButtons are the presets; the one the region is held to is lit.
@@ -524,25 +568,31 @@ func (s *snipSession) sizeFields(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "宽").FontSize(12).TextColor(tbCaption(t))
-		if s.editing {
-			ui.Text(c, s.outWText).FontSize(12.5).TextColor(tbFore(t))
-		} else {
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+			if s.editing {
+				ui.Text(c, s.outWText).FontSize(12.5).TextColor(tbFore(t))
+				return
+			}
 			w := ui.TextInputBase(c.Key("out-w"), &s.outWText).Width(60).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
 				Placeholder("宽").Label("输出宽度").
 				Tooltip("输出宽度（像素），回车确认").OnSubmit(s.takeWidth)
-			s.selectOnFocus("out-w", w, s.outWText)
-		}
+			s.numberFocus("out-w", w, s.outWText, s.takeWidth)
+			s.stepper(c, "out-w", "宽度", s.bumpWidth)
+		})
 		ui.Text(c, "×").FontSize(12).TextColor(tbCaption(t))
-		if s.editing {
-			ui.Text(c, s.outHText).FontSize(12.5).TextColor(tbFore(t))
-		} else {
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+			if s.editing {
+				ui.Text(c, s.outHText).FontSize(12.5).TextColor(tbFore(t))
+				return
+			}
 			h := ui.TextInputBase(c.Key("out-h"), &s.outHText).Width(60).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
 				Placeholder("高").Label("输出高度").
 				Tooltip("输出高度（像素），回车确认").OnSubmit(s.takeHeight)
-			s.selectOnFocus("out-h", h, s.outHText)
-		}
+			s.numberFocus("out-h", h, s.outHText, s.takeHeight)
+			s.stepper(c, "out-h", "高度", s.bumpHeight)
+		})
 		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
 	})
 }
@@ -553,15 +603,18 @@ func (s *snipSession) cornerField(c *ui.Context) {
 	t := c.Theme()
 	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
 		ui.Text(c, "圆角").FontSize(12).TextColor(tbCaption(t))
-		if s.editing {
-			ui.Text(c, s.radText).FontSize(12.5).TextColor(tbFore(t))
-		} else {
+		ui.Row(c).Gap(2).AlignItems(ui.Center).Children(func() {
+			if s.editing {
+				ui.Text(c, s.radText).FontSize(12.5).TextColor(tbFore(t))
+				return
+			}
 			r := ui.TextInputBase(c.Key("corner"), &s.radText).Width(48).Height(24).
 				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
-				Placeholder("0").Label("圆角半径").
+				Label("圆角半径").
 				Tooltip("圆角半径（像素），回车确认").OnSubmit(s.takeRadius)
-			s.selectOnFocus("corner", r, s.radText)
-		}
+			s.numberFocus("corner", r, s.radText, s.takeRadius)
+			s.stepper(c, "corner", "圆角", s.bumpRadius)
+		})
 		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
 	})
 }
@@ -619,7 +672,9 @@ func (s *snipSession) swatches(c *ui.Context) {
 }
 
 // customButton is the last dot: it opens a picker for a colour the four
-// presets do not have, and wears that colour once one is chosen.
+// presets do not have. Its mark stays the palette, whichever colour was
+// mixed, so the button is recognised the same way every time; the colour in
+// force shows as the lit background.
 func (s *snipSession) customButton(c *ui.Context) {
 	t := c.Theme()
 	on := s.hasCustom && s.color == s.customColor
@@ -627,6 +682,9 @@ func (s *snipSession) customButton(c *ui.Context) {
 		Center().Label("自定义颜色").Tooltip("自定义颜色")
 	if b.Hovered() {
 		b.Background(tbHover(t))
+	}
+	if on {
+		b.Background(tbActive(t))
 	}
 	if b.Clicked() {
 		s.colorPanel = !s.colorPanel
@@ -640,17 +698,7 @@ func (s *snipSession) customButton(c *ui.Context) {
 	}
 	b.Children(func() {
 		ui.Box(c).Width(16).Height(16).Draw(func(p *ui.Painter, r ui.Rect) {
-			if !s.hasCustom {
-				drawIcon(p, "palette", r, tbFore(t))
-				return
-			}
-			if on {
-				p.Fill(r, ui.RGBA(s.customColor.R, s.customColor.G, s.customColor.B, 0.24), 8)
-				p.Fill(ui.Rect{X: r.X + 2, Y: r.Y + 2, W: 12, H: 12}, s.customColor, 6)
-				p.Stroke(ui.Rect{X: r.X + 2, Y: r.Y + 2, W: 12, H: 12}, s.customColor, 6, 1)
-				return
-			}
-			p.Fill(ui.Rect{X: r.X + 3, Y: r.Y + 3, W: 10, H: 10}, s.customColor, 5)
+			drawIcon(p, "palette", ui.Rect{X: r.X + 1, Y: r.Y + 1, W: r.W - 2, H: r.H - 2}, tbFore(t))
 		})
 	})
 }
