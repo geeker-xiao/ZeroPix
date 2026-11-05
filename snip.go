@@ -10,6 +10,7 @@ import (
 	"image"
 	"image/color"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -106,6 +107,19 @@ type snipSession struct {
 	// as the widgets write into them.
 	fontPick  string
 	sizeValue float64
+
+	// Output geometry: the aspect the region is held to (zero for free),
+	// the size the bar shows in pixels, and the corner radius the export
+	// gets, also in pixels. The strings are what the fields show while the
+	// numbers are what the region and the export use.
+	aspectW  float64
+	aspectH  float64
+	outW     float64
+	outH     float64
+	radiusPx float64
+	outWText string
+	outHText string
+	radText  string
 
 	// In-place text entry.
 	editing    bool
@@ -205,6 +219,7 @@ func startSnip(full bool) {
 			s.sel = s.frame
 			s.hasSel, s.phase = true, phaseEdit
 			s.want = ui.CursorDefault
+			s.syncOutput()
 		}
 		s.win = mygo.NewWindow(mygo.WindowOptions{
 			Title:           appName + " 截图",
@@ -320,6 +335,7 @@ func (s *snipSession) bindShortcuts(c *ui.Context) {
 	c.OnShortcut(ui.Ctrl, ui.KeyA, func() {
 		s.sel = s.frame
 		s.hasSel, s.phase = true, phaseEdit
+		s.syncOutput()
 	})
 	// Tool keys: the first ten drawing tools, 1 through 9 and 0.
 	toolKeys := []ui.Key{ui.Key1, ui.Key2, ui.Key3, ui.Key4, ui.Key5,
@@ -355,12 +371,19 @@ func (s *snipSession) input(ev ui.InputEvent) bool {
 		case dragNew:
 			s.sel = normalizeRect(s.dragFrom.X, s.dragFrom.Y, ev.X, ev.Y)
 			s.sel = intersectRect(s.sel, s.frame)
+			s.syncOutput()
 		case dragMove:
 			s.sel.X = s.dragSel.X + (ev.X - s.dragFrom.X)
 			s.sel.Y = s.dragSel.Y + (ev.Y - s.dragFrom.Y)
 			s.clampSelection()
+			s.syncOutput()
 		case dragResize:
-			s.sel = resizeRect(s.dragSel, s.handle, ev.X, ev.Y)
+			if ar := s.aspectRatio(); ar > 0 {
+				s.sel = resizeRectKeepsAspect(s.dragSel, s.handle, ev.X, ev.Y, ar)
+			} else {
+				s.sel = resizeRect(s.dragSel, s.handle, ev.X, ev.Y)
+			}
+			s.syncOutput()
 		case dragShape:
 			if s.drawing != nil {
 				s.drawing.b = ui.Point{X: ev.X, Y: ev.Y}
@@ -441,6 +464,7 @@ func (s *snipSession) input(ev ui.InputEvent) bool {
 			} else {
 				s.phase = phaseEdit
 			}
+			s.syncOutput()
 		case dragShape:
 			s.finishShape()
 		case dragMove, dragResize, dragErase:
@@ -456,6 +480,9 @@ func (s *snipSession) beginNewSelection(x, y float32) {
 	s.drag = dragNew
 	s.hasSel = true
 	s.phase = phaseSelect
+	// A fresh frame is free-hand: holding the old aspect would silently
+	// bend a rectangle the user is dragging out.
+	s.aspectW, s.aspectH = 0, 0
 	s.dragFrom = ui.Point{X: x, Y: y}
 	s.sel = ui.Rect{X: x, Y: y}
 }
@@ -696,7 +723,20 @@ func (s *snipSession) paint(p *ui.Painter, r ui.Rect) {
 	p.Fill(ui.Rect{X: sel.X + sel.W, Y: sel.Y, W: max(r.X+r.W-sel.X-sel.W, 0), H: sel.H}, snipDim, 0)
 
 	// Annotations stay inside the region, as they will in the export.
-	p.Clip(sel, 0, func() {
+	radius := s.cornerRadiusDip()
+	if radius > 0 {
+		// The dimming above covers the corners the export will cut away;
+		// drawing the region again through the rounded clip shows what
+		// will be left, instead of a square frame over a rounded result.
+		src := ui.Rect{
+			X: sel.X * float32(s.scale),
+			Y: sel.Y * float32(s.scale),
+			W: sel.W * float32(s.scale),
+			H: sel.H * float32(s.scale),
+		}
+		p.Clip(sel, radius, func() { p.ImageRegion(s.bmp, src, sel, ui.ImageOptions{}) })
+	}
+	p.Clip(sel, radius, func() {
 		if s.path == nil {
 			s.path = &ui.Path{}
 		}
@@ -709,8 +749,8 @@ func (s *snipSession) paint(p *ui.Painter, r ui.Rect) {
 	if s.phase == phaseEdit {
 		// A pale halo keeps the brand rule visible over a capture that is
 		// itself green or dark.
-		p.Stroke(growRect(sel, 1), ui.RGBA(255, 255, 255, 0.8), 0, 3)
-		p.Stroke(sel, snipAccent, 0, 1.5)
+		p.Stroke(growRect(sel, 1), ui.RGBA(255, 255, 255, 0.8), radius, 3)
+		p.Stroke(sel, snipAccent, radius, 1.5)
 		handleCol := ui.RGBA(255, 255, 255, 1)
 		for _, hr := range handleRects(sel) {
 			p.Fill(hr, handleCol, 2)
@@ -952,6 +992,180 @@ const (
 	actClose
 )
 
+// ---------------------------------------------------------------------------
+// Output size and corners.
+
+// syncOutput makes the numbers in the bar follow the region.
+func (s *snipSession) syncOutput() {
+	if s.scale <= 0 {
+		return
+	}
+	s.outW = math.Round(float64(s.sel.W) * s.scale)
+	s.outH = math.Round(float64(s.sel.H) * s.scale)
+	s.outWText = itoa(int(s.outW))
+	s.outHText = itoa(int(s.outH))
+}
+
+// takeWidth and takeHeight read a size typed into the bar. A number that
+// does not parse, or one below the smallest region, leaves the region be.
+func (s *snipSession) takeWidth() {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(s.outWText), 64); err == nil && v >= 8 {
+		s.outW = v
+		s.applyWidth()
+	}
+	s.outWText = itoa(int(math.Round(s.outW)))
+}
+
+func (s *snipSession) takeHeight() {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(s.outHText), 64); err == nil && v >= 8 {
+		s.outH = v
+		s.applyHeight()
+	}
+	s.outHText = itoa(int(math.Round(s.outH)))
+}
+
+// takeRadius reads the corner radius typed into the bar: 0 keeps the
+// region square.
+func (s *snipSession) takeRadius() {
+	if v, err := strconv.ParseFloat(strings.TrimSpace(s.radText), 64); err == nil && v >= 0 {
+		s.radiusPx = min(v, 400)
+	}
+	s.radText = itoa(int(math.Round(s.radiusPx)))
+	s.refresh()
+}
+
+// aspectRatio is the aspect the region is held to, or 0 when it is free.
+func (s *snipSession) aspectRatio() float64 {
+	if s.aspectW <= 0 || s.aspectH <= 0 {
+		return 0
+	}
+	return s.aspectW / s.aspectH
+}
+
+// cornerRadiusDip is the exported radius in the overlay's units, never more
+// than half the shorter side.
+func (s *snipSession) cornerRadiusDip() float32 {
+	if s.radiusPx <= 0 || s.scale <= 0 {
+		return 0
+	}
+	return min(float32(s.radiusPx/s.scale), min(s.sel.W, s.sel.H)/2)
+}
+
+// applyAspect holds the region to w:h, sized around the middle of what is
+// selected now. Zero for either side makes it free again.
+func (s *snipSession) applyAspect(w, h float64) {
+	s.aspectW, s.aspectH = w, h
+	if w <= 0 || h <= 0 || s.sel.W < 1 || s.sel.H < 1 {
+		s.syncOutput()
+		return
+	}
+	nw := s.sel.W
+	nh := float32(float64(nw) * h / w)
+	if nh > s.frame.H {
+		nh = s.frame.H
+		nw = float32(float64(nh) * w / h)
+	}
+	if nw > s.frame.W {
+		nw = s.frame.W
+		nh = float32(float64(nw) * h / w)
+	}
+	s.resizeSel(nw, nh)
+}
+
+// applyWidth takes the width typed into the bar; a held aspect sets the
+// height from it.
+func (s *snipSession) applyWidth() {
+	if s.scale <= 0 || s.sel.W < 1 {
+		return
+	}
+	w := float32(s.outW / s.scale)
+	h := float32(s.outH / s.scale)
+	if ar := s.aspectRatio(); ar > 0 {
+		h = float32(float64(w) / ar)
+	}
+	s.resizeSel(w, h)
+}
+
+// applyHeight is applyWidth the other way round.
+func (s *snipSession) applyHeight() {
+	if s.scale <= 0 || s.sel.H < 1 {
+		return
+	}
+	w := float32(s.outW / s.scale)
+	h := float32(s.outH / s.scale)
+	if ar := s.aspectRatio(); ar > 0 {
+		w = float32(float64(h) * ar)
+	}
+	s.resizeSel(w, h)
+}
+
+// resizeSel puts a region of w by h DIPs around the middle of the current
+// one, inside the screen and on the held aspect when there is one.
+func (s *snipSession) resizeSel(w, h float32) {
+	w = min(max(w, 8), s.frame.W)
+	h = min(max(h, 8), s.frame.H)
+	if ar := s.aspectRatio(); ar > 0 {
+		// Clamping one side must not break the aspect.
+		if float64(w)/float64(h) > ar {
+			w = float32(float64(h) * ar)
+		} else {
+			h = float32(float64(w) / ar)
+		}
+	}
+	s.sel = centeredRect(s.sel, w, h, s.frame)
+	s.syncOutput()
+}
+
+// roundCorners clears what falls outside a rounded rectangle, softening the
+// edge by one pixel so that it does not look stepped.
+func roundCorners(img *image.RGBA, radius float64) {
+	if img == nil || radius <= 0 {
+		return
+	}
+	b := img.Bounds()
+	w, h := float64(b.Dx()), float64(b.Dy())
+	r := math.Min(radius, math.Min(w, h)/2)
+	if r <= 0 {
+		return
+	}
+	for y := 0; y < int(h); y++ {
+		cy := float64(y) + 0.5
+		dy := 0.0
+		switch {
+		case cy < r:
+			dy = r - cy
+		case cy > h-r:
+			dy = cy - (h - r)
+		default:
+			continue
+		}
+		for x := 0; x < int(w); x++ {
+			cx := float64(x) + 0.5
+			dx := 0.0
+			switch {
+			case cx < r:
+				dx = r - cx
+			case cx > w-r:
+				dx = cx - (w - r)
+			default:
+				continue
+			}
+			d := math.Hypot(dx, dy)
+			if d <= r-0.5 {
+				continue
+			}
+			i := img.PixOffset(b.Min.X+x, b.Min.Y+y) + 3
+			cover := r + 0.5 - d
+			switch {
+			case cover <= 0:
+				img.Pix[i] = 0
+			case cover < 1:
+				img.Pix[i] = uint8(float64(img.Pix[i]) * cover)
+			}
+		}
+	}
+}
+
 // render crops the region at physical scale and draws the annotations on it.
 func (s *snipSession) render() *image.RGBA {
 	if !s.hasSel || s.sel.W < 1 || s.sel.H < 1 {
@@ -962,6 +1176,9 @@ func (s *snipSession) render() *image.RGBA {
 		return nil
 	}
 	rasterShapes(crop, s.shapes, s.sel.X, s.sel.Y, s.scale)
+	if s.radiusPx > 0 {
+		roundCorners(crop, s.radiusPx)
+	}
 	return crop
 }
 
@@ -1049,6 +1266,16 @@ func growRect(r ui.Rect, d float32) ui.Rect {
 	return ui.Rect{X: r.X - d, Y: r.Y - d, W: r.W + 2*d, H: r.H + 2*d}
 }
 
+// centeredRect places a w by h rectangle over the middle of a, kept inside
+// frame.
+func centeredRect(a ui.Rect, w, h float32, frame ui.Rect) ui.Rect {
+	x := a.X + (a.W-w)/2
+	y := a.Y + (a.H-h)/2
+	x = min(max(x, frame.X), frame.X+frame.W-w)
+	y = min(max(y, frame.Y), frame.Y+frame.H-h)
+	return ui.Rect{X: x, Y: y, W: w, H: h}
+}
+
 // handleRects returns the eight handle boxes around r, DIPs.
 func handleRects(r ui.Rect) [handleCount]ui.Rect {
 	const side = 9
@@ -1108,6 +1335,50 @@ func resizeRect(orig ui.Rect, handle int, x, y float32) ui.Rect {
 		}
 	}
 	return normalizeRect(l, t, rr, b)
+}
+
+// resizeRectKeepsAspect drags a handle like resizeRect, then takes the box
+// back to the held aspect: the corner opposite a dragged corner stays put,
+// a side drag keeps the middle of the other axis.
+func resizeRectKeepsAspect(orig ui.Rect, handle int, x, y float32, ar float64) ui.Rect {
+	r := resizeRect(orig, handle, x, y)
+	w, h := float64(r.W), float64(r.H)
+	if w <= 0 || h <= 0 || ar <= 0 {
+		return r
+	}
+	switch handle {
+	case handleN, handleS:
+		w = h * ar
+	case handleE, handleW:
+		h = w / ar
+	default:
+		if w/h > ar {
+			w = h * ar
+		} else {
+			h = w / ar
+		}
+	}
+	nw, nh := float32(w), float32(h)
+	cx := orig.X + orig.W/2
+	cy := orig.Y + orig.H/2
+	switch handle {
+	case handleNW:
+		return ui.Rect{X: orig.X + orig.W - nw, Y: orig.Y + orig.H - nh, W: nw, H: nh}
+	case handleNE:
+		return ui.Rect{X: orig.X, Y: orig.Y + orig.H - nh, W: nw, H: nh}
+	case handleSE:
+		return ui.Rect{X: orig.X, Y: orig.Y, W: nw, H: nh}
+	case handleSW:
+		return ui.Rect{X: orig.X + orig.W - nw, Y: orig.Y, W: nw, H: nh}
+	case handleN:
+		return ui.Rect{X: cx - nw/2, Y: orig.Y + orig.H - nh, W: nw, H: nh}
+	case handleS:
+		return ui.Rect{X: cx - nw/2, Y: orig.Y, W: nw, H: nh}
+	case handleW:
+		return ui.Rect{X: orig.X + orig.W - nw, Y: cy - nh/2, W: nw, H: nh}
+	default: // handleE
+		return ui.Rect{X: orig.X, Y: cy - nh/2, W: nw, H: nh}
+	}
 }
 
 // cropRGBA copies a sub-rectangle into a fresh RGBA image.

@@ -24,6 +24,9 @@ const (
 	tbDivMargin float32 = 5
 	tbRowH      float32 = 36
 	tbInset     float32 = 10
+	// The output line needs this much room even when the preset leaves the
+	// bar with a handful of buttons.
+	tbOutputMinW float32 = 620
 )
 
 // The bar is a sheet of its own over the capture, so it carries the
@@ -346,11 +349,14 @@ func (s *snipSession) buildToolbar(c *ui.Context) {
 	for _, r := range rows {
 		barW = max(barW, r.width)
 	}
+	// The output line has to hold the aspects, the two sizes and the corner
+	// field even when the preset left the bar with only a few buttons.
+	barW = min(max(barW, tbOutputMinW), maxW)
 	barW += tbPadX * 2
 	// The box includes its 1px hairline, so the rows plus the padding plus
 	// both edges fill it exactly; leaving the border out of the sum made the
 	// rows overflow by two pixels and pushed the buttons off centre.
-	barH := float32(len(rows))*tbRowH + float32(len(rows)-1)*tbRowGap + tbPadY*2 + 2
+	barH := float32(len(rows)+1)*tbRowH + float32(len(rows))*tbRowGap + tbPadY*2 + 2
 
 	x, y := s.toolbarPos(barW, barH)
 	s.barRect = ui.Rect{X: x, Y: y, W: barW, H: barH}
@@ -364,6 +370,7 @@ func (s *snipSession) buildToolbar(c *ui.Context) {
 			for _, row := range rows {
 				s.buildRow(c, row)
 			}
+			s.buildOutputRow(c)
 		})
 	s.colorPanelView(c)
 }
@@ -411,6 +418,119 @@ func (s *snipSession) buildSwatchRow(c *ui.Context) {
 		})
 		ui.Text(c, strings.ToUpper(hexOf(color.RGBA{R: s.color.R, G: s.color.G, B: s.color.B, A: 255}))).
 			FontSize(12).Font("Consolas, 微软雅黑, monospace").TextColor(tbCaption(t))
+	})
+}
+
+// aspectPresets are the shapes the output line can hold the region to, in
+// the order it shows them. Zero for both sides makes the region free again.
+var aspectPresets = []struct {
+	label string
+	w, h  float64
+}{
+	{"自由", 0, 0},
+	{"16:9", 16, 9},
+	{"1:16", 1, 16},
+	{"4:3", 4, 3},
+	{"3:4", 3, 4},
+	{"1:1", 1, 1},
+}
+
+// buildOutputRow is the line under the colours: the aspect, the size in
+// pixels, and the corner radius the export is cut with.
+func (s *snipSession) buildOutputRow(c *ui.Context) {
+	if s.outW == 0 && s.outH == 0 {
+		s.syncOutput()
+	}
+	if s.radText == "" {
+		s.radText = "0"
+	}
+	ui.Row(c).FillWidth().Height(tbRowH).Gap(8).AlignItems(ui.Center).
+		Justify(ui.SpaceBetween).Children(func() {
+		s.aspectButtons(c)
+		s.sizeFields(c)
+		s.cornerField(c)
+	})
+}
+
+// aspectButtons are the presets; the one the region is held to is lit.
+func (s *snipSession) aspectButtons(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Gap(tbGap).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "比例").FontSize(12).TextColor(tbCaption(t))
+		for i, a := range aspectPresets {
+			on := s.aspectW == a.w && s.aspectH == a.h
+			fg := tbFore(t)
+			if on {
+				fg = tbAccent(t)
+			}
+			tip := "锁定比例 " + a.label
+			if a.w == 0 {
+				tip = "不锁定比例"
+			}
+			b := ui.ButtonBase(c.Key("aspect-" + itoa(i))).
+				Width(measureLabel(a.label) + 12).Height(26).Radius(6).
+				Center().Label(a.label).Tooltip(tip)
+			switch {
+			case on:
+				b.Background(tbActive(t))
+			case b.Hovered():
+				b.Background(tbHover(t))
+			}
+			if b.Clicked() {
+				s.applyAspect(a.w, a.h)
+			}
+			b.Children(func() {
+				ui.Text(c, a.label).FontSize(12.5).TextColor(fg)
+			})
+		}
+	})
+}
+
+// sizeFields show the region in output pixels and take a new width or
+// height, keeping the held aspect when there is one. The fields commit on
+// Enter: every keystroke would otherwise reshape the region under the
+// pointer. While text is being typed the numbers only read, as the editor
+// owns the keyboard then.
+func (s *snipSession) sizeFields(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "宽").FontSize(12).TextColor(tbCaption(t))
+		if s.editing {
+			ui.Text(c, s.outWText).FontSize(12.5).TextColor(tbFore(t))
+		} else {
+			ui.TextInputBase(c.Key("out-w"), &s.outWText).Width(60).Height(24).
+				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
+				Placeholder("宽").Label("输出宽度").
+				Tooltip("输出宽度（像素），回车确认").OnSubmit(s.takeWidth)
+		}
+		ui.Text(c, "×").FontSize(12).TextColor(tbCaption(t))
+		if s.editing {
+			ui.Text(c, s.outHText).FontSize(12.5).TextColor(tbFore(t))
+		} else {
+			ui.TextInputBase(c.Key("out-h"), &s.outHText).Width(60).Height(24).
+				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
+				Placeholder("高").Label("输出高度").
+				Tooltip("输出高度（像素），回车确认").OnSubmit(s.takeHeight)
+		}
+		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
+	})
+}
+
+// cornerField is the radius the export is rounded by, in output pixels: 0
+// leaves the region square.
+func (s *snipSession) cornerField(c *ui.Context) {
+	t := c.Theme()
+	ui.Row(c).Gap(4).AlignItems(ui.Center).Children(func() {
+		ui.Text(c, "圆角").FontSize(12).TextColor(tbCaption(t))
+		if s.editing {
+			ui.Text(c, s.radText).FontSize(12.5).TextColor(tbFore(t))
+		} else {
+			ui.TextInputBase(c.Key("corner"), &s.radText).Width(48).Height(24).
+				FontSize(12.5).Radius(5).Background(tbHover(t)).Padding(0, 6).
+				Placeholder("0").Label("圆角半径").
+				Tooltip("圆角半径（像素），回车确认").OnSubmit(s.takeRadius)
+		}
+		ui.Text(c, "px").FontSize(11).TextColor(tbCaption(t))
 	})
 }
 
